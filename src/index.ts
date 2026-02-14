@@ -6,4 +6,5 @@ export type {
   GoeyToasterProps,
   GoeyToastAction,
   GoeyToastClassNames,
+  GoeyToastTimings,
 } from './types'

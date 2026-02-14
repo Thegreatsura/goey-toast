@@ -27,11 +27,11 @@
 }
 
 .contentCompact {
-  padding: 7px 14px 7px 10px;
+  padding: 7px 10px 7px 10px;
 }
 
 .contentExpanded {
-  padding: 7px 14px 16px 10px;
+  padding: 7px 10px 16px 10px;
   max-width: 380px;
 }
 
@@ -56,11 +56,12 @@
 }
 
 .title {
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
   color: inherit;
+  padding: 0 4px 0 2px;
 }
 
 .titleSuccess { color: #4CAF50; }
@@ -70,7 +71,7 @@
 .titleLoading { color: #555; }
 
 .description {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
   color: #444;
   line-height: 1.55;
@@ -90,8 +91,8 @@
   border: none;
   border-radius: 999px;
   padding: 10px 20px;
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
   font-family: inherit;
   text-align: center;

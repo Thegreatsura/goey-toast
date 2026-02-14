@@ -3,6 +3,13 @@ import type { ExternalToast, ToasterProps } from 'sonner'
 
 export type GoeyToastType = 'success' | 'error' | 'warning' | 'info'
 
+export interface GoeyToastTimings {
+  expandDelay?: number
+  expandDuration?: number
+  collapseDuration?: number
+  displayDuration?: number
+}
+
 export interface GoeyToastClassNames {
   wrapper?: string
   content?: string
@@ -39,6 +46,7 @@ export interface GoeyToastOptions {
   id?: string | number
   classNames?: GoeyToastClassNames
   fillColor?: string
+  timing?: GoeyToastTimings
 }
 
 export interface GoeyPromiseData<T> {
@@ -56,6 +64,7 @@ export interface GoeyPromiseData<T> {
   }
   classNames?: GoeyToastClassNames
   fillColor?: string
+  timing?: GoeyToastTimings
 }
 
 export type GoeyToastPhase = 'loading' | 'success' | 'error' | 'warning' | 'info'

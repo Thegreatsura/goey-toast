@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect, useLayoutEffect, useCallback, type FC, type ReactNode } from 'react'
 import { motion, AnimatePresence, animate } from 'framer-motion'
-import type { GoeyToastAction, GoeyToastClassNames, GoeyToastPhase, GoeyToastType } from '../types'
+import type { GoeyToastAction, GoeyToastClassNames, GoeyToastPhase, GoeyToastTimings, GoeyToastType } from '../types'
 import { SuccessIcon, ErrorIcon, WarningIcon, InfoIcon, SpinnerIcon } from '../icons'
 import styles from './GoeyToast.module.css'
 
@@ -13,6 +13,7 @@ export interface GoeyToastProps {
   phase: GoeyToastPhase
   classNames?: GoeyToastClassNames
   fillColor?: string
+  timing?: GoeyToastTimings
 }
 
 const phaseIconMap: Record<Exclude<GoeyToastPhase, 'loading'>, FC<{ size?: number; className?: string }>> = {
@@ -128,6 +129,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   phase,
   classNames,
   fillColor = '#F2F1EC',
+  timing,
 }) => {
   // Action success override state
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
@@ -189,18 +191,20 @@ export const GoeyToast: FC<GoeyToastProps> = ({
         contentRef.current.style.clipPath = ''
       }
     } else if (t > 0) {
-      // Morphing: lock content at final width + clip-path (prevents text reflow)
+      // Morphing: lock content at final target width + clip-path (prevents text reflow)
+      const targetBw = dimsRef.current.bw
+      const targetTh = dimsRef.current.th
       const pillW = Math.min(p, b)
       const currentW = pillW + (b - pillW) * t
-      const currentH = PH + (h - PH) * t
+      const currentH = PH + (targetTh - PH) * t
       if (wrapperRef.current) {
         wrapperRef.current.style.width = currentW + 'px'
       }
       if (contentRef.current) {
-        contentRef.current.style.width = b + 'px'
+        contentRef.current.style.width = targetBw + 'px'
         contentRef.current.style.overflow = 'hidden'
         contentRef.current.style.maxHeight = currentH + 'px'
-        contentRef.current.style.clipPath = `inset(0 ${b - currentW}px 0 0)`
+        contentRef.current.style.clipPath = `inset(0 ${targetBw - currentW}px 0 0)`
       }
     } else {
       // Compact: constrain to pill dimensions
@@ -292,7 +296,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
 
     pillResizeCtrl.current?.stop()
     pillResizeCtrl.current = animate(0, 1, {
-      duration: 0.3,
+      duration: 0.6,
       ease: [0.4, 0, 0.2, 1],
       onUpdate: (t) => {
         aDims.current = {
@@ -308,7 +312,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   // Phase 1: expand (delay showBody) or collapse (reverse morph)
   useEffect(() => {
     if (isExpanded) {
-      const t1 = setTimeout(() => setShowBody(true), 350)
+      const t1 = setTimeout(() => setShowBody(true), timing?.expandDelay ?? 10)
       return () => clearTimeout(t1)
     }
 
@@ -327,7 +331,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       const targetDims = { pw: targetPw, bw: targetPw, th: PH }
 
       morphCtrl.current = animate(morphTRef.current, 0, {
-        duration: 0.4,
+        duration: timing?.collapseDuration ?? 0.4,
         ease: [0.4, 0, 0.2, 1],
         onUpdate: (t) => {
           morphTRef.current = t
@@ -367,13 +371,20 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     const raf = requestAnimationFrame(() => {
       pillResizeCtrl.current?.stop()
       morphCtrl.current?.stop()
+      // Capture current animated dims so we interpolate smoothly from
+      // wherever the pill resize left off instead of snapping to target.
+      const startDims = { ...aDims.current }
       morphCtrl.current = animate(0, 1, {
-        duration: 0.6,
+        duration: timing?.expandDuration ?? 0.6,
         ease: [0.4, 0, 0.2, 1],
         onUpdate: (t) => {
           morphTRef.current = t
-          // Use latest measured dims so path tracks growing content
-          aDims.current = { ...dimsRef.current }
+          const target = dimsRef.current
+          aDims.current = {
+            pw: startDims.pw + (target.pw - startDims.pw) * t,
+            bw: startDims.bw + (target.bw - startDims.bw) * t,
+            th: startDims.th + (target.th - startDims.th) * t,
+          }
           flush()
         },
         onComplete: () => {
