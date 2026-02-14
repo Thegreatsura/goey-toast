@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { GoeyToaster, goeyToast } from 'goey-toast'
 import type { GoeyToastOptions, GoeyToasterProps } from 'goey-toast'
+import 'goey-toast/styles.css'
 import './App.css'
 
 type ToastType = 'default' | 'success' | 'error' | 'warning' | 'info'
