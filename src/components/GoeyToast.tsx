@@ -28,6 +28,14 @@ const titleColorMap: Record<GoeyToastPhase, string> = {
   info: styles.titleInfo,
 }
 
+const actionColorMap: Record<GoeyToastPhase, string> = {
+  loading: styles.actionInfo,
+  success: styles.actionSuccess,
+  error: styles.actionError,
+  warning: styles.actionWarning,
+  info: styles.actionInfo,
+}
+
 const PH = 34 // pill height constant
 
 /**
@@ -38,7 +46,10 @@ function morphPath(pw: number, bw: number, th: number, t: number): string {
   const pr = PH / 2
   const pillW = Math.min(pw, bw)
 
-  if (t <= 0) {
+  const bodyH = PH + (th - PH) * t
+
+  // Pure pill when t is zero or body too small for proper rounded corners
+  if (t <= 0 || bodyH - PH < 8) {
     return [
       `M 0,${pr}`,
       `A ${pr},${pr} 0 0 1 ${pr},0`,
@@ -52,9 +63,8 @@ function morphPath(pw: number, bw: number, th: number, t: number): string {
   }
 
   const curve = 14 * t
-  const cr = Math.max(1, 16 * t)
+  const cr = Math.min(16, (bodyH - PH) * 0.45)
   const bodyW = pillW + (bw - pillW) * t
-  const bodyH = PH + (th - PH) * t
   const bodyTop = PH - curve
   const qEndX = Math.min(pillW + curve, bodyW - cr)
 
@@ -149,9 +159,9 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       }
       if (contentRef.current) {
         contentRef.current.style.width = b + 'px'
-        contentRef.current.style.overflow = ''
-        contentRef.current.style.maxHeight = ''
-        contentRef.current.style.clipPath = `inset(0 ${b - currentW}px ${h - currentH}px 0)`
+        contentRef.current.style.overflow = 'hidden'
+        contentRef.current.style.maxHeight = currentH + 'px'
+        contentRef.current.style.clipPath = `inset(0 ${b - currentW}px 0 0)`
       }
     } else {
       // Compact: constrain to pill dimensions
@@ -183,7 +193,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     contentRef.current.style.maxHeight = ''
     contentRef.current.style.width = ''
 
-    const pw = headerRef.current.offsetWidth + 28
+    const pw = headerRef.current.offsetWidth + 24
     const bw = contentRef.current.offsetWidth
     const th = contentRef.current.offsetHeight
 
@@ -274,18 +284,29 @@ export const GoeyToast: FC<GoeyToastProps> = ({
         ? { ...expandedDimsRef.current }
         : { ...aDims.current }
 
+      // Compute target compact pill dims from current header content
+      // +24 matches compact CSS padding (left 10 + right 14) so pw = bw in compact
+      const targetPw = headerRef.current ? headerRef.current.offsetWidth + 24 : savedDims.pw
+      const targetDims = { pw: targetPw, bw: targetPw, th: PH }
+
       morphCtrl.current = animate(morphTRef.current, 0, {
         duration: 0.4,
         ease: [0.4, 0, 0.2, 1],
         onUpdate: (t) => {
           morphTRef.current = t
-          aDims.current = savedDims
+          // Interpolate dims from expanded toward compact target
+          aDims.current = {
+            pw: targetDims.pw + (savedDims.pw - targetDims.pw) * t,
+            bw: targetDims.bw + (savedDims.bw - targetDims.bw) * t,
+            th: targetDims.th + (savedDims.th - targetDims.th) * t,
+          }
           flush()
         },
         onComplete: () => {
           morphTRef.current = 0
           collapsingRef.current = false
           setShowBody(false)
+          aDims.current = { ...targetDims }
           flush()
         },
       })
@@ -410,7 +431,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
               transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1], delay: 0.1 }}
             >
               <button
-                className={styles.actionButton}
+                className={`${styles.actionButton} ${actionColorMap[effectivePhase]}`}
                 onClick={handleActionClick}
                 type="button"
               >

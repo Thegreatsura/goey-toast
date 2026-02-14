@@ -27,11 +27,11 @@
 }
 
 .contentCompact {
-  padding: 5px 14px 5px 6px;
+  padding: 7px 14px 7px 10px;
 }
 
 .contentExpanded {
-  padding: 7px 18px 16px 10px;
+  padding: 7px 14px 16px 10px;
   max-width: 380px;
 }
 
@@ -74,7 +74,7 @@
   font-weight: 400;
   color: #444;
   line-height: 1.55;
-  margin-top: 8px;
+  margin-top: 12px;
   overflow: hidden;
 }
 
@@ -87,23 +87,41 @@
   display: block;
   box-sizing: border-box;
   width: 100%;
-  background: #DEDDD8;
   border: none;
   border-radius: 999px;
   padding: 10px 20px;
   font-size: 14px;
   font-weight: 500;
-  color: #333;
   cursor: pointer;
   font-family: inherit;
   text-align: center;
   transition: background 0.15s ease;
 }
 
-.actionButton:hover {
-  background: #D4D3CE;
+.actionSuccess {
+  background: #C8E6C9;
+  color: #4CAF50;
 }
+.actionSuccess:hover { background: #A5D6A7; }
+.actionSuccess:active { background: #81C784; }
 
-.actionButton:active {
-  background: #CCCBC6;
+.actionError {
+  background: #FFCDD2;
+  color: #E53935;
 }
+.actionError:hover { background: #EF9A9A; }
+.actionError:active { background: #E57373; }
+
+.actionWarning {
+  background: #FFECB3;
+  color: #C49000;
+}
+.actionWarning:hover { background: #FFE082; }
+.actionWarning:active { background: #FFD54F; }
+
+.actionInfo {
+  background: #BBDEFB;
+  color: #1E88E5;
+}
+.actionInfo:hover { background: #90CAF9; }
+.actionInfo:active { background: #64B5F6; }
