@@ -632,7 +632,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     headerSquishCtrl.current?.stop()
     const el = headerRef.current
 
-    if (showBody && !dismissing) {
+    if (showBody && !dismissing && !actionSuccess) {
       // Squish down with elastic spring — scaled to expand timing
       headerSquished.current = true
       headerSquishCtrl.current = animate(0, 1, {
@@ -644,10 +644,14 @@ export const GoeyToast: FC<GoeyToastProps> = ({
         },
       })
     } else if (headerSquished.current) {
-      // Spring back to normal — scaled to collapse timing
+      // Spring back to normal — match morph transition type
       headerSquished.current = false
+      const isSpringCollapse = !preDismissRef.current
+      const transition = isSpringCollapse
+        ? squishSpring(collapseDur, DEFAULT_COLLAPSE_DUR)
+        : { duration: collapseDur * 0.5, ease: [0.4, 0, 0.2, 1] as const }
       headerSquishCtrl.current = animate(1, 0, {
-        ...squishSpring(collapseDur, DEFAULT_COLLAPSE_DUR),
+        ...transition,
         onUpdate: (v) => {
           const scale = 1 - 0.05 * v
           const pushY = v * 1
@@ -660,7 +664,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     }
 
     return () => { headerSquishCtrl.current?.stop() }
-  }, [showBody, dismissing, prefersReducedMotion, expandDur, collapseDur])
+  }, [showBody, dismissing, actionSuccess, prefersReducedMotion, expandDur, collapseDur])
 
   // Keep Sonner's toast stacking in sync when it re-renders (e.g. hover expand/collapse).
   // Sonner overwrites --offset/--initial-height with stale values from its React state,
