@@ -58,11 +58,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/freddy/goey-toast"
+    "url": "https://github.com/anl331/goey-toast"
   },
-  "homepage": "https://github.com/freddy/goey-toast",
+  "homepage": "https://github.com/anl331/goey-toast",
   "bugs": {
-    "url": "https://github.com/freddy/goey-toast/issues"
+    "url": "https://github.com/anl331/goey-toast/issues"
   },
   "engines": {
     "node": ">=18.0.0"
