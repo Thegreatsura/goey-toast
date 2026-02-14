@@ -414,8 +414,9 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     }
 
     pillResizeCtrl.current?.stop()
-    // Fire vertical squish alongside the horizontal resize — skip if recently collapsed
-    if (Date.now() - collapseEndTime.current > 500) {
+    // Fire vertical squish alongside the horizontal resize
+    // Skip if recently collapsed or about to expand (promise resolve/reject)
+    if (Date.now() - collapseEndTime.current > 500 && !isExpanded) {
       triggerLandingSquish('expand')
     }
     pillResizeCtrl.current = animate(0, 1, {
