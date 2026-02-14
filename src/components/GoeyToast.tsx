@@ -212,6 +212,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   // Animation controllers
   const morphCtrl = useRef<ReturnType<typeof animate> | null>(null)
   const pillResizeCtrl = useRef<ReturnType<typeof animate> | null>(null)
+  const headerSquishCtrl = useRef<ReturnType<typeof animate> | null>(null)
 
   // Animated state (not React state — avoids re-renders during animation)
   const morphTRef = useRef(0)
@@ -235,21 +236,6 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     const pos = getGoeyPosition()
     const rightSide = pos?.includes('right') ?? false
     pathRef.current?.setAttribute('d', morphPath(p, b, h, t))
-
-    // Header squish: scale down when expanded, return to normal on collapse
-    if (headerRef.current) {
-      if (t > 0) {
-        // Squish proportional to morph progress — stays squished while open
-        const squish = Math.min(t / 0.3, 1)
-        const scale = 1 - 0.05 * squish
-        const pushY = squish * 1
-        headerRef.current.style.transform = `scale(${scale}) translateY(${pushY}px)`
-        headerRef.current.style.transition = 'none'
-      } else {
-        headerRef.current.style.transform = ''
-        headerRef.current.style.transition = ''
-      }
-    }
 
     if (t >= 1) {
       // Fully expanded: clear all constraints
@@ -536,6 +522,46 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       morphCtrl.current?.stop()
     }
   }, [showBody, flush, prefersReducedMotion])
+
+  // Header elastic squish: spring down when expanding, spring back on collapse
+  useEffect(() => {
+    if (!headerRef.current || prefersReducedMotion) return
+    headerSquishCtrl.current?.stop()
+    const el = headerRef.current
+
+    if (showBody) {
+      // Squish down with elastic spring
+      headerSquishCtrl.current = animate(0, 1, {
+        type: 'spring',
+        stiffness: 300,
+        damping: 15,
+        mass: 0.8,
+        onUpdate: (v) => {
+          const scale = 1 - 0.05 * v
+          const pushY = v * 1
+          el.style.transform = `scale(${scale}) translateY(${pushY}px)`
+        },
+      })
+    } else {
+      // Spring back to normal
+      headerSquishCtrl.current = animate(1, 0, {
+        type: 'spring',
+        stiffness: 400,
+        damping: 20,
+        mass: 0.6,
+        onUpdate: (v) => {
+          const scale = 1 - 0.05 * v
+          const pushY = v * 1
+          el.style.transform = `scale(${scale}) translateY(${pushY}px)`
+        },
+        onComplete: () => {
+          el.style.transform = ''
+        },
+      })
+    }
+
+    return () => { headerSquishCtrl.current?.stop() }
+  }, [showBody, prefersReducedMotion])
 
   // Keep Sonner's toast stacking in sync when it re-renders (e.g. hover expand/collapse).
   // Sonner overwrites --offset/--initial-height with stale values from its React state,

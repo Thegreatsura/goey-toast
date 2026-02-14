@@ -8,6 +8,7 @@ vi.mock('framer-motion', () => ({
     svg: ({ children, ...props }: any) => <svg {...props}>{children}</svg>,
   },
   AnimatePresence: ({ children }: any) => <>{children}</>,
+  animate: () => ({ stop: () => {} }),
 }))
 
 vi.mock('sonner', () => ({
