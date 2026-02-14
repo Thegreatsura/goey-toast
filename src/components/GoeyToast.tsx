@@ -231,7 +231,9 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   const flush = useCallback(() => {
     const { pw: p, bw: b, th: h } = aDims.current
     if (p <= 0 || b <= 0 || h <= 0) return
-    const t = morphTRef.current
+    // Clamp t to [0,1] — spring overshoot past 1 or below 0 must not
+    // cause flush to toggle between constraint branches (jitter).
+    const t = Math.max(0, Math.min(1, morphTRef.current))
     // Read position fresh each call so flush never uses a stale value
     const pos = getGoeyPosition()
     const rightSide = pos?.includes('right') ?? false
@@ -408,30 +410,6 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     })
   }, [prefersReducedMotion])
 
-  // Blob squish: full vertical → horizontal oscillation (only after morph settles)
-  const triggerBlobSquish = useCallback(() => {
-    if (!wrapperRef.current || prefersReducedMotion) return
-    blobSquishCtrl.current?.stop()
-    const el = wrapperRef.current
-    blobSquishCtrl.current = animate(0, 1, {
-      type: 'spring',
-      stiffness: 300,
-      damping: 10,
-      mass: 0.8,
-      onUpdate: (v) => {
-        const s = Math.sin(v * Math.PI * 2)
-        const sx = 1 + 0.04 * s
-        const sy = 1 - 0.04 * s
-        el.style.transformOrigin = 'center center'
-        el.style.transform = (el.style.transform?.includes('scaleX(-1)') ? 'scaleX(-1) ' : '') + `scaleX(${sx}) scaleY(${sy})`
-      },
-      onComplete: () => {
-        const right = el.style.transform?.includes('scaleX(-1)')
-        el.style.transform = right ? 'scaleX(-1)' : ''
-        el.style.transformOrigin = ''
-      },
-    })
-  }, [prefersReducedMotion])
 
   // Landing squish after Sonner's entrance animation settles
   const mountSquished = useRef(false)
@@ -501,7 +479,6 @@ export const GoeyToast: FC<GoeyToastProps> = ({
           setShowBody(false)
           aDims.current = { ...targetDims }
           flush()
-          triggerBlobSquish()
         },
       })
       return () => { morphCtrl.current?.stop() }
@@ -578,7 +555,6 @@ export const GoeyToast: FC<GoeyToastProps> = ({
           aDims.current = { ...dimsRef.current }
           flush()
           syncSonnerHeights(wrapperRef.current)
-          triggerBlobSquish()
         },
       })
     })
