@@ -99,7 +99,7 @@ const DEMO_DEFAULTS = {
 } satisfies GoeyToastOptions
 
 const TOAST_TYPES: ToastType[] = ['default', 'success', 'error', 'warning', 'info']
-const POSITIONS: GoeyToasterProps['position'][] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
+const POSITIONS: GoeyToasterProps['position'][] = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right']
 
 function App() {
   const installCopy = useCopy()

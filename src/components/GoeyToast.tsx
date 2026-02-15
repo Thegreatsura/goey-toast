@@ -184,6 +184,84 @@ function morphPath(pw: number, bw: number, th: number, t: number): string {
   ].join(' ')
 }
 
+/**
+ * Centered morph path: pill centered on top, body grows symmetrically below.
+ * t=0 → pure pill (centered), t=1 → full blob with pill centered on top.
+ */
+function morphPathCenter(pw: number, bw: number, th: number, t: number): string {
+  const pr = PH / 2
+  const pillW = Math.min(pw, bw)
+
+  // Pill is ALWAYS centered at the final body width position
+  const pillOffset = (bw - pillW) / 2
+
+  // Pure pill when t is zero or body too small
+  if (t <= 0 || PH + (th - PH) * t - PH < 8) {
+    return [
+      `M ${pillOffset},${pr}`,
+      `A ${pr},${pr} 0 0 1 ${pillOffset + pr},0`,
+      `H ${pillOffset + pillW - pr}`,
+      `A ${pr},${pr} 0 0 1 ${pillOffset + pillW},${pr}`,
+      `A ${pr},${pr} 0 0 1 ${pillOffset + pillW - pr},${PH}`,
+      `H ${pillOffset + pr}`,
+      `A ${pr},${pr} 0 0 1 ${pillOffset},${pr}`,
+      `Z`,
+    ].join(' ')
+  }
+
+  const bodyH = PH + (th - PH) * t
+  const curve = 14 * t
+  const cr = Math.min(16, (bodyH - PH) * 0.45)
+  const bodyTop = PH - curve
+
+  // Body grows symmetrically outward from pill center
+  const bodyCenter = bw / 2
+  const halfBodyW = (pillW / 2) + ((bw - pillW) / 2) * t  // grows from pillW/2 to bw/2
+  const bodyLeft = bodyCenter - halfBodyW
+  const bodyRight = bodyCenter + halfBodyW
+
+  // Q curve endpoints: body edges meet pill edges with organic curves
+  const qLeftX = Math.max(bodyLeft + cr, pillOffset - curve)
+  const qRightX = Math.min(bodyRight - cr, pillOffset + pillW + curve)
+
+  return [
+    // Start at left side of pill
+    `M ${pillOffset},${pr}`,
+    // Pill top-left arc
+    `A ${pr},${pr} 0 0 1 ${pillOffset + pr},0`,
+    // Top edge of pill
+    `H ${pillOffset + pillW - pr}`,
+    // Pill top-right arc
+    `A ${pr},${pr} 0 0 1 ${pillOffset + pillW},${pr}`,
+    // Right side down to body junction
+    `L ${pillOffset + pillW},${bodyTop}`,
+    // Right organic curve from pill to body
+    `Q ${pillOffset + pillW},${bodyTop + curve} ${qRightX},${bodyTop + curve}`,
+    // Right side of body
+    `H ${bodyRight - cr}`,
+    // Body top-right corner
+    `A ${cr},${cr} 0 0 1 ${bodyRight},${bodyTop + curve + cr}`,
+    // Right edge down
+    `L ${bodyRight},${bodyH - cr}`,
+    // Body bottom-right corner
+    `A ${cr},${cr} 0 0 1 ${bodyRight - cr},${bodyH}`,
+    // Bottom edge
+    `H ${bodyLeft + cr}`,
+    // Body bottom-left corner
+    `A ${cr},${cr} 0 0 1 ${bodyLeft},${bodyH - cr}`,
+    // Left edge up
+    `L ${bodyLeft},${bodyTop + curve + cr}`,
+    // Body top-left corner
+    `A ${cr},${cr} 0 0 1 ${bodyLeft + cr},${bodyTop + curve}`,
+    // Left side of body
+    `H ${qLeftX}`,
+    // Left organic curve from body to pill
+    `Q ${pillOffset},${bodyTop + curve} ${pillOffset},${bodyTop}`,
+    // Close back to start
+    `Z`,
+  ].join(' ')
+}
+
 // Smooth easing curve for non-spring animations
 const SMOOTH_EASE = [0.4, 0, 0.2, 1] as const
 
@@ -204,6 +282,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
 }) => {
   const position = getGoeyPosition()
   const isRight = position?.includes('right') ?? false
+  const isCenter = position?.includes('center') ?? false
   const prefersReducedMotion = usePrefersReducedMotion()
   // Per-toast spring overrides global, default to true
   const useSpring = springProp ?? getGoeySpring()
@@ -267,7 +346,15 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     // Read position fresh each call so flush never uses a stale value
     const pos = getGoeyPosition()
     const rightSide = pos?.includes('right') ?? false
-    pathRef.current?.setAttribute('d', morphPath(p, b, h, t))
+    const centerPos = pos?.includes('center') ?? false
+    // Center positions: use full target body width during morph so pill stays fixed at center
+    // At t=0 (compact), wrapper is pill-width so use regular morphPath (no centering needed)
+    if (centerPos && t > 0) {
+      const centerBw = dimsRef.current.bw > 0 ? Math.max(dimsRef.current.bw, p) : b
+      pathRef.current?.setAttribute('d', morphPathCenter(p, centerBw, h, t))
+    } else {
+      pathRef.current?.setAttribute('d', morphPath(p, b, h, t))
+    }
 
     if (t >= 1) {
       // Fully expanded: clear all constraints
@@ -288,16 +375,23 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       const currentW = pillW + (b - pillW) * t
       const currentH = PH + (targetTh - PH) * t
       if (wrapperRef.current) {
-        wrapperRef.current.style.width = currentW + 'px'
+        // Center: full target body width so SVG morph path has room
+        const targetFullW = dimsRef.current.bw > 0 ? dimsRef.current.bw : b
+        wrapperRef.current.style.width = (centerPos ? targetFullW : currentW) + 'px'
       }
       if (contentRef.current) {
         contentRef.current.style.width = targetBw + 'px'
         contentRef.current.style.overflow = 'hidden'
         contentRef.current.style.maxHeight = currentH + 'px'
         const clip = targetBw - currentW
-        contentRef.current.style.clipPath = rightSide
-          ? `inset(0 0 0 ${clip}px)`
-          : `inset(0 ${clip}px 0 0)`
+        if (centerPos) {
+          const halfClip = clip / 2
+          contentRef.current.style.clipPath = `inset(0 ${halfClip}px 0 ${halfClip}px)`
+        } else {
+          contentRef.current.style.clipPath = rightSide
+            ? `inset(0 0 0 ${clip}px)`
+            : `inset(0 ${clip}px 0 0)`
+        }
       }
     } else {
       // Compact: constrain to pill dimensions
@@ -389,7 +483,8 @@ export const GoeyToast: FC<GoeyToastProps> = ({
         const sy = 1 - compressY * intensity
         const sx = 1 + expandX * intensity
         const mirror = el.style.transform?.includes('scaleX(-1)') ? 'scaleX(-1) ' : ''
-        el.style.transformOrigin = 'center bottom'
+        // Anchor squish at pill (top of blob) so body feels like it expands from pill center
+        el.style.transformOrigin = 'center top'
         el.style.transform = mirror + `scaleX(${sx}) scaleY(${sy})`
       },
       onComplete: () => {
@@ -798,7 +893,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   )
 
   return (
-    <div ref={wrapperRef} className={`${styles.wrapper}${classNames?.wrapper ? ` ${classNames.wrapper}` : ''}`} style={isRight ? { marginLeft: 'auto', transform: 'scaleX(-1)' } : undefined} role={effectivePhase === 'error' ? 'alert' : 'status'} aria-live={effectivePhase === 'error' ? 'assertive' : 'polite'} aria-atomic="true" onMouseEnter={() => { hoveredRef.current = true; setHovered(true) }} onMouseLeave={() => { hoveredRef.current = false; setHovered(false) }}>
+    <div ref={wrapperRef} className={`${styles.wrapper}${classNames?.wrapper ? ` ${classNames.wrapper}` : ''}`} style={isCenter ? { margin: '0 auto' } : isRight ? { marginLeft: 'auto', transform: 'scaleX(-1)' } : undefined} role={effectivePhase === 'error' ? 'alert' : 'status'} aria-live={effectivePhase === 'error' ? 'assertive' : 'polite'} aria-atomic="true" onMouseEnter={() => { hoveredRef.current = true; setHovered(true) }} onMouseLeave={() => { hoveredRef.current = false; setHovered(false) }} data-center={isCenter || undefined}>
       {/* SVG background — overflow visible, path controls shape */}
       <svg
         className={styles.blobSvg}
@@ -816,7 +911,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       <div
         ref={contentRef}
         className={`${styles.content} ${showBody ? styles.contentExpanded : styles.contentCompact}${classNames?.content ? ` ${classNames.content}` : ''}`}
-        style={isRight ? { transform: 'scaleX(-1)', textAlign: 'right' } : { textAlign: 'left' }}
+        style={isCenter ? { textAlign: 'center' } : isRight ? { transform: 'scaleX(-1)', textAlign: 'right' } : { textAlign: 'left' }}
       >
         <div ref={headerRef} className={`${styles.header} ${titleColorMap[effectivePhase]}${classNames?.header ? ` ${classNames.header}` : ''}`}>
           {iconAndTitle}

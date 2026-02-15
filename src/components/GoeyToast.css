@@ -8,6 +8,15 @@
   to { transform: rotate(360deg); }
 }
 
+/* Center position: center the toast within Sonner's container */
+[data-sonner-toast][data-x-position="center"] {
+  left: 0 !important;
+  right: 0 !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+  width: fit-content !important;
+}
+
 /* Style detection marker — used by GoeyToaster to verify CSS is loaded */
 [data-goey-toast-css] { --goey-toast: 1; }
 
