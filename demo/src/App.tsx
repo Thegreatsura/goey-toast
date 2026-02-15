@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { GoeyToaster, goeyToast } from 'goey-toast'
 import type { GoeyToastOptions, GoeyToasterProps } from 'goey-toast'
+import { Analytics } from '@vercel/analytics/react'
 import 'goey-toast/styles.css'
 import './App.css'
 
@@ -220,6 +221,7 @@ function App() {
 
   return (
     <>
+      <Analytics />
       <GoeyToaster position={bPosition} />
 
       {/* Header */}
