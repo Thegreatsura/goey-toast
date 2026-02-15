@@ -86,6 +86,16 @@ function useCopy() {
   return { copied, copy }
 }
 
+const DEMO_DEFAULTS: GoeyToastOptions = {
+  spring: false,
+  timing: {
+    expandDelay: 80,
+    expandDuration: 0.6,
+    collapseDuration: 0.8,
+    displayDuration: 3000,
+  },
+}
+
 const TOAST_TYPES: ToastType[] = ['default', 'success', 'error', 'warning', 'info']
 const POSITIONS: GoeyToasterProps['position'][] = ['top-left', 'top-right', 'bottom-left', 'bottom-right']
 
@@ -132,11 +142,11 @@ function App() {
   const [bHasBorder, setBHasBorder] = useState(false)
   const [bBorderColor, setBBorderColor] = useState('#E0E0E0')
   const [bBorderWidth, setBBorderWidth] = useState(1.5)
-  const [bExpandDelay, setBExpandDelay] = useState(330)
-  const [bExpandDuration, setBExpandDuration] = useState(0.9)
-  const [bCollapseDuration, setBCollapseDuration] = useState(0.9)
-  const [bDisplayDuration, setBDisplayDuration] = useState(4000)
-  const [bSpring, setBSpring] = useState(true)
+  const [bExpandDelay, setBExpandDelay] = useState(80)
+  const [bExpandDuration, setBExpandDuration] = useState(0.6)
+  const [bCollapseDuration, setBCollapseDuration] = useState(0.8)
+  const [bDisplayDuration, setBDisplayDuration] = useState(3000)
+  const [bSpring, setBSpring] = useState(false)
 
   // Close mobile menu on page change
   useEffect(() => {
@@ -345,21 +355,21 @@ function App() {
             <div className="section">
               <div className="section-label">Toast Types</div>
               <div className="buttons">
-                <button onClick={() => goeyToast('Notification received')}>Default</button>
-                <button onClick={() => goeyToast.success('Changes Saved')}>Success</button>
-                <button onClick={() => goeyToast.error('Something went wrong')}>Error</button>
-                <button onClick={() => goeyToast.warning('Storage is almost full')}>Warning</button>
-                <button onClick={() => goeyToast.info('New update available')}>Info</button>
+                <button onClick={() => goeyToast('Notification received', DEMO_DEFAULTS)}>Default</button>
+                <button onClick={() => goeyToast.success('Changes Saved', DEMO_DEFAULTS)}>Success</button>
+                <button onClick={() => goeyToast.error('Something went wrong', DEMO_DEFAULTS)}>Error</button>
+                <button onClick={() => goeyToast.warning('Storage is almost full', DEMO_DEFAULTS)}>Warning</button>
+                <button onClick={() => goeyToast.info('New update available', DEMO_DEFAULTS)}>Info</button>
               </div>
             </div>
 
             <div className="section">
               <div className="section-label">With Description</div>
               <div className="buttons">
-                <button onClick={() => goeyToast.warning('Your session is about to expire', { description: "You've been inactive for 25 minutes. Please save your work or your session will end automatically." })}>
+                <button onClick={() => goeyToast.warning('Your session is about to expire', { ...DEMO_DEFAULTS, description: "You've been inactive for 25 minutes. Please save your work or your session will end automatically." })}>
                   Warning + Description
                 </button>
-                <button onClick={() => goeyToast.error('Connection lost', { description: 'Unable to reach the server. Check your internet connection and try again.' })}>
+                <button onClick={() => goeyToast.error('Connection lost', { ...DEMO_DEFAULTS, description: 'Unable to reach the server. Check your internet connection and try again.' })}>
                   Error + Description
                 </button>
               </div>
@@ -368,10 +378,10 @@ function App() {
             <div className="section">
               <div className="section-label">With Action Button</div>
               <div className="buttons">
-                <button onClick={() => goeyToast.error('Payment failed', { description: 'Your card ending in 4242 was declined. Please update your payment method to continue.', action: { label: 'Update Payment', onClick: () => goeyToast.success('Redirecting...') } })}>
+                <button onClick={() => goeyToast.error('Payment failed', { ...DEMO_DEFAULTS, description: 'Your card ending in 4242 was declined. Please update your payment method to continue.', action: { label: 'Update Payment', onClick: () => goeyToast.success('Redirecting...', DEMO_DEFAULTS) } })}>
                   Error + Action
                 </button>
-                <button onClick={() => goeyToast.info('Share link ready', { description: 'Your share link has been generated and is ready to copy.', action: { label: 'Copy to Clipboard', onClick: () => navigator.clipboard.writeText('https://example.com/share/abc123'), successLabel: 'Copied!' } })}>
+                <button onClick={() => goeyToast.info('Share link ready', { ...DEMO_DEFAULTS, description: 'Your share link has been generated and is ready to copy.', action: { label: 'Copy to Clipboard', onClick: () => navigator.clipboard.writeText('https://example.com/share/abc123'), successLabel: 'Copied!' } })}>
                   Action + Success Pill
                 </button>
               </div>
@@ -381,6 +391,7 @@ function App() {
               <div className="section-label">Custom Component Body</div>
               <div className="buttons">
                 <button onClick={() => goeyToast.success('Deployment complete', {
+                  ...DEMO_DEFAULTS,
                   description: (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: 300 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
@@ -408,25 +419,25 @@ function App() {
             <div className="section">
               <div className="section-label">No Spring (Smooth Easing)</div>
               <div className="buttons">
-                <button onClick={() => goeyToast.success('Changes Saved', { spring: false })}>Success (no spring)</button>
-                <button onClick={() => goeyToast.error('Connection lost', { description: 'Unable to reach the server. Check your internet connection and try again.', spring: false })}>Error + Desc (no spring)</button>
-                <button onClick={() => goeyToast.info('Share link ready', { description: 'Your share link has been generated and is ready to copy.', action: { label: 'Copy to Clipboard', onClick: () => navigator.clipboard.writeText('https://example.com/share/abc123'), successLabel: 'Copied!' }, spring: false })}>Action (no spring)</button>
+                <button onClick={() => goeyToast.success('Changes Saved', DEMO_DEFAULTS)}>Success (no spring)</button>
+                <button onClick={() => goeyToast.error('Connection lost', { ...DEMO_DEFAULTS, description: 'Unable to reach the server. Check your internet connection and try again.' })}>Error + Desc (no spring)</button>
+                <button onClick={() => goeyToast.info('Share link ready', { ...DEMO_DEFAULTS, description: 'Your share link has been generated and is ready to copy.', action: { label: 'Copy to Clipboard', onClick: () => navigator.clipboard.writeText('https://example.com/share/abc123'), successLabel: 'Copied!' } })}>Action (no spring)</button>
               </div>
             </div>
 
             <div className="section">
               <div className="section-label">Promise (Morph Animation)</div>
               <div className="buttons">
-                <button onClick={() => goeyToast.promise(sleep(2000), { loading: 'Saving...', success: 'Changes Saved', error: 'Something went wrong' })}>
+                <button onClick={() => goeyToast.promise(sleep(2000), { ...DEMO_DEFAULTS, loading: 'Saving...', success: 'Changes Saved', error: 'Something went wrong' })}>
                   Promise + Success (pill)
                 </button>
-                <button onClick={() => goeyToast.promise(failAfter(2000), { loading: 'Saving...', success: 'Changes Saved', error: 'Something went wrong' })}>
+                <button onClick={() => goeyToast.promise(failAfter(2000), { ...DEMO_DEFAULTS, loading: 'Saving...', success: 'Changes Saved', error: 'Something went wrong' })}>
                   Promise + Error (pill)
                 </button>
-                <button onClick={() => goeyToast.promise(failAfter(2000), { loading: 'Uploading file...', success: 'Upload complete', error: 'Upload failed', description: { error: "You've used 95% of your available storage. Please upgrade and plan to continue." }, action: { error: { label: 'Action Button', onClick: () => goeyToast.info('Retrying...') } } })}>
+                <button onClick={() => goeyToast.promise(failAfter(2000), { ...DEMO_DEFAULTS, loading: 'Uploading file...', success: 'Upload complete', error: 'Upload failed', description: { error: "You've used 95% of your available storage. Please upgrade and plan to continue." }, action: { error: { label: 'Action Button', onClick: () => goeyToast.info('Retrying...', DEMO_DEFAULTS) } } })}>
                   Promise + Error (expanded)
                 </button>
-                <button onClick={() => goeyToast.promise(sleep(2000), { loading: 'Processing...', success: 'All done!', error: 'Failed', description: { success: 'Your data has been processed and saved successfully.' } })}>
+                <button onClick={() => goeyToast.promise(sleep(2000), { ...DEMO_DEFAULTS, loading: 'Processing...', success: 'All done!', error: 'Failed', description: { success: 'Your data has been processed and saved successfully.' } })}>
                   Promise + Success (expanded)
                 </button>
               </div>
@@ -731,11 +742,11 @@ goeyToast.error('Failed')             // red
 goeyToast.warning('Careful')          // yellow
 goeyToast.info('FYI')                 // blue`}</code></pre>
                 <div className="doc-try-buttons">
-                  <button onClick={() => goeyToast('Notification received')}>Default</button>
-                  <button onClick={() => goeyToast.success('Changes Saved')}>Success</button>
-                  <button onClick={() => goeyToast.error('Something went wrong')}>Error</button>
-                  <button onClick={() => goeyToast.warning('Storage is almost full')}>Warning</button>
-                  <button onClick={() => goeyToast.info('New update available')}>Info</button>
+                  <button onClick={() => goeyToast('Notification received', DEMO_DEFAULTS)}>Default</button>
+                  <button onClick={() => goeyToast.success('Changes Saved', DEMO_DEFAULTS)}>Success</button>
+                  <button onClick={() => goeyToast.error('Something went wrong', DEMO_DEFAULTS)}>Error</button>
+                  <button onClick={() => goeyToast.warning('Storage is almost full', DEMO_DEFAULTS)}>Warning</button>
+                  <button onClick={() => goeyToast.info('New update available', DEMO_DEFAULTS)}>Info</button>
                 </div>
               </div>
             </div>
@@ -764,8 +775,8 @@ goeyToast.success('Deployed', {
   ),
 })`}</code></pre>
                 <div className="doc-try-buttons">
-                  <button onClick={() => goeyToast.warning('Your session is about to expire', { description: "You've been inactive for 25 minutes. Please save your work or your session will end automatically." })}>Warning + Description</button>
-                  <button onClick={() => goeyToast.error('Connection lost', { description: 'Unable to reach the server. Check your internet connection and try again.' })}>Error + Description</button>
+                  <button onClick={() => goeyToast.warning('Your session is about to expire', { ...DEMO_DEFAULTS, description: "You've been inactive for 25 minutes. Please save your work or your session will end automatically." })}>Warning + Description</button>
+                  <button onClick={() => goeyToast.error('Connection lost', { ...DEMO_DEFAULTS, description: 'Unable to reach the server. Check your internet connection and try again.' })}>Error + Description</button>
                 </div>
               </div>
             </div>
@@ -789,8 +800,8 @@ goeyToast.success('Deployed', {
   },
 })`}</code></pre>
                 <div className="doc-try-buttons">
-                  <button onClick={() => goeyToast.error('Payment failed', { description: 'Your card ending in 4242 was declined. Please update your payment method to continue.', action: { label: 'Update Payment', onClick: () => goeyToast.success('Redirecting...') } })}>Error + Action</button>
-                  <button onClick={() => goeyToast.info('Share link ready', { description: 'Your share link has been generated and is ready to copy.', action: { label: 'Copy to Clipboard', onClick: () => navigator.clipboard.writeText('https://example.com/share/abc123'), successLabel: 'Copied!' } })}>Action + Success Pill</button>
+                  <button onClick={() => goeyToast.error('Payment failed', { ...DEMO_DEFAULTS, description: 'Your card ending in 4242 was declined. Please update your payment method to continue.', action: { label: 'Update Payment', onClick: () => goeyToast.success('Redirecting...', DEMO_DEFAULTS) } })}>Error + Action</button>
+                  <button onClick={() => goeyToast.info('Share link ready', { ...DEMO_DEFAULTS, description: 'Your share link has been generated and is ready to copy.', action: { label: 'Copy to Clipboard', onClick: () => navigator.clipboard.writeText('https://example.com/share/abc123'), successLabel: 'Copied!' } })}>Action + Success Pill</button>
                 </div>
               </div>
             </div>
@@ -820,9 +831,9 @@ goeyToast.success('Deployed', {
   },
 })`}</code></pre>
                 <div className="doc-try-buttons">
-                  <button onClick={() => goeyToast.promise(sleep(2000), { loading: 'Saving...', success: 'Changes Saved', error: 'Something went wrong' })}>Promise + Success (pill)</button>
-                  <button onClick={() => goeyToast.promise(failAfter(2000), { loading: 'Saving...', success: 'Changes Saved', error: 'Something went wrong' })}>Promise + Error (pill)</button>
-                  <button onClick={() => goeyToast.promise(sleep(2000), { loading: 'Processing...', success: 'All done!', error: 'Failed', description: { success: 'Your data has been processed and saved successfully.' } })}>Promise + Success (expanded)</button>
+                  <button onClick={() => goeyToast.promise(sleep(2000), { ...DEMO_DEFAULTS, loading: 'Saving...', success: 'Changes Saved', error: 'Something went wrong' })}>Promise + Success (pill)</button>
+                  <button onClick={() => goeyToast.promise(failAfter(2000), { ...DEMO_DEFAULTS, loading: 'Saving...', success: 'Changes Saved', error: 'Something went wrong' })}>Promise + Error (pill)</button>
+                  <button onClick={() => goeyToast.promise(sleep(2000), { ...DEMO_DEFAULTS, loading: 'Processing...', success: 'All done!', error: 'Failed', description: { success: 'Your data has been processed and saved successfully.' } })}>Promise + Success (expanded)</button>
                 </div>
               </div>
             </div>
@@ -934,7 +945,7 @@ goeyToast.success('Deployed', {
   },
 })`}</code></pre>
                 <div className="doc-try-buttons">
-                  <button onClick={() => goeyToast.success('Styled!', { fillColor: '#1a1a2e', borderColor: '#333', borderWidth: 2, description: 'Custom fill and border styling.' })}>Try Custom Style</button>
+                  <button onClick={() => goeyToast.success('Styled!', { ...DEMO_DEFAULTS, fillColor: '#1a1a2e', borderColor: '#333', borderWidth: 2, description: 'Custom fill and border styling.' })}>Try Custom Style</button>
                 </div>
                 <div className="table-scroll">
                 <table className="prop-table">
@@ -981,9 +992,9 @@ goeyToast.success('Saved', {
                   Per-toast values override the global setting.
                 </p>
                 <div className="doc-try-buttons">
-                  <button onClick={() => goeyToast.success('Smooth save', { spring: false })}>No Spring (pill)</button>
-                  <button onClick={() => goeyToast.warning('Storage warning', { description: 'You are using 95% of your available storage.', spring: false })}>No Spring (expanded)</button>
-                  <button onClick={() => goeyToast.success('Bouncy save', { spring: true })}>With Spring (compare)</button>
+                  <button onClick={() => goeyToast.success('Smooth save', DEMO_DEFAULTS)}>No Spring (pill)</button>
+                  <button onClick={() => goeyToast.warning('Storage warning', { ...DEMO_DEFAULTS, description: 'You are using 95% of your available storage.' })}>No Spring (expanded)</button>
+                  <button onClick={() => goeyToast.success('Bouncy save', { ...DEMO_DEFAULTS, spring: true })}>With Spring (compare)</button>
                 </div>
               </div>
             </div>
