@@ -347,10 +347,11 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     const pos = getGoeyPosition()
     const rightSide = pos?.includes('right') ?? false
     const centerPos = pos?.includes('center') ?? false
-    // Center positions: use full target body width during morph so pill stays fixed at center
+    // Center positions: use full body width during morph so pill stays fixed at center
     // At t=0 (compact), wrapper is pill-width so use regular morphPath (no centering needed)
+    // Use max of animated bw, target bw, and expanded bw to handle action-success collapse
     if (centerPos && t > 0) {
-      const centerBw = dimsRef.current.bw > 0 ? Math.max(dimsRef.current.bw, p) : b
+      const centerBw = Math.max(b, dimsRef.current.bw, expandedDimsRef.current.bw, p)
       pathRef.current?.setAttribute('d', morphPathCenter(p, centerBw, h, t))
     } else {
       pathRef.current?.setAttribute('d', morphPath(p, b, h, t))
@@ -375,9 +376,9 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       const currentW = pillW + (b - pillW) * t
       const currentH = PH + (targetTh - PH) * t
       if (wrapperRef.current) {
-        // Center: full target body width so SVG morph path has room
-        const targetFullW = dimsRef.current.bw > 0 ? dimsRef.current.bw : b
-        wrapperRef.current.style.width = (centerPos ? targetFullW : currentW) + 'px'
+        // Center: full body width so SVG morph path has room
+        const centerFullW = Math.max(b, dimsRef.current.bw, expandedDimsRef.current.bw)
+        wrapperRef.current.style.width = (centerPos ? centerFullW : currentW) + 'px'
       }
       if (contentRef.current) {
         contentRef.current.style.width = targetBw + 'px'
@@ -567,9 +568,10 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   }, [hasDims, squishDelayMs, triggerLandingSquish])
 
   // Squish on expand (showBody false→true) — collapse squish is fired directly in morph code
+  // Skip squish on hover re-expand (hovered + was dismissing) to avoid jarring bounce
   const prevShowBody = useRef(false)
   useLayoutEffect(() => {
-    if (!prevShowBody.current && showBody) {
+    if (!prevShowBody.current && showBody && !hoveredRef.current) {
       // Small delay after morph starts for more satisfying "settle then bounce" feel
       const t = setTimeout(() => triggerLandingSquish('expand'), 80)
       return () => clearTimeout(t)
@@ -687,7 +689,8 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     const fullDelay = displayMs - expandDelayMs - collapseMs
     if (fullDelay <= 0) return
 
-    // Don't start while hovered
+    // Don't start timer while hovered — pause and resume on unhover
+    if (hoveredRef.current) return
 
     const delay = remainingRef.current ?? fullDelay
     timerStartRef.current = Date.now()

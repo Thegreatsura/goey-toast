@@ -170,7 +170,7 @@ function App() {
     const options: GoeyToastOptions = {}
     if (bHasDesc && bDesc) options.description = bDesc
     if (bHasAction && bActionLabel) {
-      options.action = { label: bActionLabel, onClick: () => {} }
+      options.action = { label: bActionLabel, onClick: () => {}, successLabel: 'Done!' }
     }
     if (bFillColor !== '#ffffff') options.fillColor = bFillColor
     if (bHasBorder && bBorderColor) {
