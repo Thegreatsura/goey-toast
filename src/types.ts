@@ -4,6 +4,7 @@ import type { ExternalToast, ToasterProps } from 'sonner'
 export type GoeyToastType = 'default' | 'success' | 'error' | 'warning' | 'info'
 
 export interface GoeyToastTimings {
+  squishDelay?: number
   expandDelay?: number
   expandDuration?: number
   collapseDuration?: number

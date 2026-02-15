@@ -445,21 +445,24 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   }, [pw, bw, th, hasDims, showBody, flush, prefersReducedMotion, triggerLandingSquish, useSpring])
 
   // Squish on entry: only for simple toasts (no body text) — expanded toasts get squish from showBody
+  const squishDelayMs = timing?.squishDelay ?? 45
   const expandDelayMs = prefersReducedMotion ? 0 : (timing?.expandDelay ?? 330)
   const mountSquished = useRef(false)
   useEffect(() => {
     if (hasDims && !mountSquished.current && !isExpanded) {
       mountSquished.current = true
-      const t = setTimeout(triggerLandingSquish, expandDelayMs)
+      const t = setTimeout(triggerLandingSquish, squishDelayMs)
       return () => clearTimeout(t)
     }
-  }, [hasDims, expandDelayMs, triggerLandingSquish])
+  }, [hasDims, squishDelayMs, triggerLandingSquish])
 
   // Squish on expand (showBody false→true) — collapse squish is fired directly in morph code
   const prevShowBody = useRef(false)
   useLayoutEffect(() => {
     if (!prevShowBody.current && showBody) {
-      triggerLandingSquish('expand')
+      // Small delay after morph starts for more satisfying "settle then bounce" feel
+      const t = setTimeout(() => triggerLandingSquish('expand'), 80)
+      return () => clearTimeout(t)
     }
     prevShowBody.current = showBody
   }, [showBody, triggerLandingSquish])
@@ -527,7 +530,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       // Use easing when spring is disabled or during pre-dismiss
       const collapseTransition = (isPreDismiss || !useSpring)
         ? { duration: collapseDur, ease: SMOOTH_EASE }
-        : { type: 'spring' as const, duration: collapseDur, bounce: 0.2 }
+        : { type: 'spring' as const, duration: collapseDur, bounce: 0.35 }
 
       // Fire squish immediately as collapse begins — don't wait for morph to finish
       triggerLandingSquish('collapse')
@@ -609,7 +612,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       // wherever the pill resize left off instead of snapping to target.
       const startDims = { ...aDims.current }
       const morphExpandTransition = useSpring
-        ? { type: 'spring' as const, duration: timing?.expandDuration ?? 0.9, bounce: 0.2 }
+        ? { type: 'spring' as const, duration: timing?.expandDuration ?? 0.9, bounce: 0.4 }
         : { duration: timing?.expandDuration ?? 0.6, ease: SMOOTH_EASE }
       morphCtrl.current = animate(0, 1, {
         ...morphExpandTransition,

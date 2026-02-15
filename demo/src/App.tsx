@@ -133,10 +133,13 @@ function App() {
   const [bBorderColor, setBBorderColor] = useState('#E0E0E0')
   const [bBorderWidth, setBBorderWidth] = useState(1.5)
   const [bExpandDelay, setBExpandDelay] = useState(330)
+  const [bSquishDelay, setBSquishDelay] = useState(45)
   const [bExpandDuration, setBExpandDuration] = useState(0.9)
   const [bCollapseDuration, setBCollapseDuration] = useState(0.9)
   const [bDisplayDuration, setBDisplayDuration] = useState(4000)
   const [bSpring, setBSpring] = useState(true)
+
+  const isExpanded = bHasDesc || bHasAction
 
   // Close mobile menu on page change
   useEffect(() => {
@@ -168,6 +171,7 @@ function App() {
       options.borderWidth = bBorderWidth
     }
     options.timing = {
+      squishDelay: bSquishDelay,
       expandDelay: bExpandDelay,
       expandDuration: bExpandDuration,
       collapseDuration: bCollapseDuration,
@@ -207,9 +211,12 @@ function App() {
       }
       if (hasSpringOff) lines.push(`  spring: false,`)
       lines.push(`  timing: {`)
-      lines.push(`    expandDelay: ${bExpandDelay},`)
-      lines.push(`    expandDuration: ${bExpandDuration},`)
-      lines.push(`    collapseDuration: ${bCollapseDuration},`)
+      lines.push(`    squishDelay: ${bSquishDelay},`)
+      if (isExpanded) {
+        lines.push(`    expandDelay: ${bExpandDelay},`)
+        lines.push(`    expandDuration: ${bExpandDuration},`)
+        lines.push(`    collapseDuration: ${bCollapseDuration},`)
+      }
       lines.push(`    displayDuration: ${bDisplayDuration},`)
       lines.push(`  },`)
       lines.push(`})`)
@@ -590,27 +597,40 @@ function App() {
               <div className="builder-row">
                 <div className="builder-label">Timing</div>
                 <div className="slider-group">
+                  {/* Squish Delay - always visible for simple toasts */}
                   <div className="slider-item">
                     <div className="slider-item-header">
-                      <span className="slider-item-label">Expand Delay</span>
-                      <span className="slider-item-value">{bExpandDelay}ms</span>
+                      <span className="slider-item-label">Squish Delay</span>
+                      <span className="slider-item-value">{bSquishDelay}ms</span>
                     </div>
-                    <input type="range" className="slider" min={0} max={500} step={5} value={bExpandDelay} onChange={(e) => setBExpandDelay(Number(e.target.value))} />
+                    <input type="range" className="slider" min={0} max={200} step={5} value={bSquishDelay} onChange={(e) => setBSquishDelay(Number(e.target.value))} />
                   </div>
-                  <div className="slider-item">
-                    <div className="slider-item-header">
-                      <span className="slider-item-label">Expand Duration</span>
-                      <span className="slider-item-value">{bExpandDuration}s</span>
-                    </div>
-                    <input type="range" className="slider" min={0.1} max={2} step={0.1} value={bExpandDuration} onChange={(e) => setBExpandDuration(Number(e.target.value))} />
-                  </div>
-                  <div className="slider-item">
-                    <div className="slider-item-header">
-                      <span className="slider-item-label">Collapse Duration</span>
-                      <span className="slider-item-value">{bCollapseDuration}s</span>
-                    </div>
-                    <input type="range" className="slider" min={0.1} max={2} step={0.1} value={bCollapseDuration} onChange={(e) => setBCollapseDuration(Number(e.target.value))} />
-                  </div>
+                  {/* Only show expand/collapse timing when toast has description or action */}
+                  {isExpanded && (
+                    <>
+                      <div className="slider-item">
+                        <div className="slider-item-header">
+                          <span className="slider-item-label">Expand Delay</span>
+                          <span className="slider-item-value">{bExpandDelay}ms</span>
+                        </div>
+                        <input type="range" className="slider" min={0} max={500} step={5} value={bExpandDelay} onChange={(e) => setBExpandDelay(Number(e.target.value))} />
+                      </div>
+                      <div className="slider-item">
+                        <div className="slider-item-header">
+                          <span className="slider-item-label">Expand Duration</span>
+                          <span className="slider-item-value">{bExpandDuration}s</span>
+                        </div>
+                        <input type="range" className="slider" min={0.1} max={2} step={0.1} value={bExpandDuration} onChange={(e) => setBExpandDuration(Number(e.target.value))} />
+                      </div>
+                      <div className="slider-item">
+                        <div className="slider-item-header">
+                          <span className="slider-item-label">Collapse Duration</span>
+                          <span className="slider-item-value">{bCollapseDuration}s</span>
+                        </div>
+                        <input type="range" className="slider" min={0.1} max={2} step={0.1} value={bCollapseDuration} onChange={(e) => setBCollapseDuration(Number(e.target.value))} />
+                      </div>
+                    </>
+                  )}
                   <div className="slider-item">
                     <div className="slider-item-header">
                       <span className="slider-item-label">Display Duration</span>
@@ -843,6 +863,7 @@ goeyToast.success('Deployed', {
                     <tr><th>Property</th><th>Type</th><th>Default</th><th>Description</th></tr>
                   </thead>
                   <tbody>
+                    <tr><td>squishDelay</td><td>number</td><td>45</td><td>Milliseconds before squish (simple toast, no description)</td></tr>
                     <tr><td>expandDelay</td><td>number</td><td>330</td><td>Milliseconds before expand starts</td></tr>
                     <tr><td>expandDuration</td><td>number</td><td>0.9</td><td>Seconds for pill to blob morph</td></tr>
                     <tr><td>collapseDuration</td><td>number</td><td>0.9</td><td>Seconds for blob to pill morph</td></tr>
