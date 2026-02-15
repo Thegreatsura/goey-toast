@@ -177,8 +177,8 @@ function App() {
       options.borderColor = bBorderColor
       options.borderWidth = bBorderWidth
     }
-    options.timing = {
-      displayDuration: bDisplayDuration,
+    if (bDisplayDuration !== 4000) {
+      options.timing = { displayDuration: bDisplayDuration }
     }
     if (!bSpring) options.spring = false
     options.bounce = bBounce
@@ -216,9 +216,11 @@ function App() {
       }
       if (hasSpringOff) lines.push(`  spring: false,`)
       if (hasBounce) lines.push(`  bounce: ${bBounce},`)
-      lines.push(`  timing: {`)
-      lines.push(`    displayDuration: ${bDisplayDuration},`)
-      lines.push(`  },`)
+      if (bDisplayDuration !== 4000) {
+        lines.push(`  timing: {`)
+        lines.push(`    displayDuration: ${bDisplayDuration},`)
+        lines.push(`  },`)
+      }
       lines.push(`})`)
     }
     return lines.join('\n')
