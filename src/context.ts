@@ -27,3 +27,26 @@ export function setGoeyBounce(bounce: number | undefined) {
 export function getGoeyBounce() {
   return _bounce
 }
+
+// ---------------------------------------------------------------------------
+// Container hover — broadcast from GoeyToaster to all mounted GoeyToast instances
+// so timers pause and re-expand triggers correctly when hovering the stack.
+// ---------------------------------------------------------------------------
+let _containerHovered = false
+type HoverCb = (hovered: boolean) => void
+const _hoverSubs: Set<HoverCb> = new Set()
+
+export function setContainerHovered(hovered: boolean) {
+  if (_containerHovered === hovered) return
+  _containerHovered = hovered
+  _hoverSubs.forEach(cb => cb(hovered))
+}
+
+export function getContainerHovered() {
+  return _containerHovered
+}
+
+export function subscribeContainerHovered(cb: HoverCb): () => void {
+  _hoverSubs.add(cb)
+  return () => { _hoverSubs.delete(cb) }
+}

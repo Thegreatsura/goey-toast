@@ -2,7 +2,7 @@ import { useRef, useState, useEffect, useLayoutEffect, useCallback, type FC, typ
 import { motion, AnimatePresence, animate } from 'framer-motion'
 import { toast as sonnerToast } from 'sonner'
 import type { GoeyToastAction, GoeyToastClassNames, GoeyToastPhase, GoeyToastTimings, GoeyToastType } from '../types'
-import { getGoeyPosition, getGoeySpring, getGoeyBounce } from '../context'
+import { getGoeyPosition, getGoeySpring, getGoeyBounce, subscribeContainerHovered, getContainerHovered } from '../context'
 import { DefaultIcon, SuccessIcon, ErrorIcon, WarningIcon, InfoIcon, SpinnerIcon } from '../icons'
 import { usePrefersReducedMotion } from '../usePrefersReducedMotion'
 import { styles } from './goey-styles'
@@ -110,12 +110,28 @@ function registerSonnerObserver(ol: Element, callback: () => void) {
 }
 
 /**
- * Recalculates Sonner's --initial-height and --offset CSS variables on all
- * sibling toast <li> elements so expanded toasts are spaced correctly.
- * Sonner measures height once on mount (getting the compact pill height) and
- * never re-measures for toast.custom() content. This function corrects that.
+ * Recalculates CSS variables on all sibling toast <li> elements.
+ *
+ * Sonner measures height once on mount (~34px pill) and never re-measures
+ * toast.custom() content. This function corrects that.
+ *
+ * Parameters:
+ * - `includeOffsets` — also recompute --offset (not just --initial-height).
+ * - `isExpandTrigger` — this call is from the expandObs microtask (fires the
+ *   moment data-expanded becomes true, before the first CSS paint). These calls
+ *   ALWAYS write offsets. Lifecycle onComplete calls (isExpandTrigger=false)
+ *   skip offset writes when the stack is already expanded, to avoid re-targeting
+ *   the CSS transform transition mid-flight and causing "sliding" jank.
+ *
+ * DOM order: oldest toast at index 0, newest (front) at index n-1.
+ * Front toast has --offset: 0; each older toast accumulates the heights of all
+ * newer toasts plus the gap between them.
  */
-function syncSonnerHeights(wrapperEl: HTMLElement | null) {
+function syncSonnerHeights(
+  wrapperEl: HTMLElement | null,
+  includeOffsets = false,
+  isExpandTrigger = false,
+) {
   if (!wrapperEl) return
   const li = wrapperEl.closest('[data-sonner-toast]') as HTMLElement | null
   if (!li?.parentElement) return
@@ -125,14 +141,34 @@ function syncSonnerHeights(wrapperEl: HTMLElement | null) {
     ol.querySelectorAll(':scope > [data-sonner-toast]')
   ) as HTMLElement[]
 
-  // Only update --initial-height so Sonner knows each toast's actual size.
-  // Do NOT overwrite --offset — Sonner handles stacking direction (up for
-  // bottom positions, down for top) and collapsed peek offsets internally.
-  for (const t of toasts) {
+  if (toasts.length === 0) return
+
+  // Measure actual rendered height of each toast's content wrapper.
+  const heights = toasts.map(t => {
     const content = t.firstElementChild as HTMLElement | null
-    const height = content ? content.getBoundingClientRect().height : 0
-    if (height > 0) {
-      t.style.setProperty('--initial-height', `${height}px`)
+    const h = content ? content.getBoundingClientRect().height : 0
+    return h > 0 ? h : PH
+  })
+
+  // Always update --initial-height (the CSS height transition target).
+  for (let i = 0; i < toasts.length; i++) {
+    toasts[i].style.setProperty('--initial-height', `${heights[i]}px`)
+  }
+
+  if (!includeOffsets) return
+
+  // Safe to always update --offset here. The only callers with includeOffsets=true are:
+  // - expandObs (isExpandTrigger=true): fires at t=0ms as microtask before first paint
+  // - morph onComplete: fires at ~900ms+ after expansion, well after Sonner's 400ms
+  //   CSS transform transition has completed. No active transition to fight.
+  const gapStr = getComputedStyle(ol).getPropertyValue('--gap').trim()
+  const gap = parseFloat(gapStr) || 14
+
+  let runningOffset = 0
+  for (let i = toasts.length - 1; i >= 0; i--) {
+    toasts[i].style.setProperty('--offset', `${runningOffset}px`)
+    if (i > 0) {
+      runningOffset += heights[i] + gap
     }
   }
 }
@@ -293,6 +329,9 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   const [dismissing, setDismissing] = useState(false)
   const [hovered, setHovered] = useState(false)
   const hoveredRef = useRef(false)
+  // Container-level hover (hovering anywhere in the Sonner stack, not just this toast)
+  const containerHoveredRef = useRef(getContainerHovered())
+  const [containerHovered, setContainerHoveredState] = useState(getContainerHovered())
   const collapsingRef = useRef(false)
   const preDismissRef = useRef(false)
   const collapseEndTime = useRef(0)
@@ -331,6 +370,14 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   // React state for dims (triggers effects)
   const [dims, setDims] = useState({ pw: 0, bw: 0, th: 0 })
   useEffect(() => { dimsRef.current = dims }, [dims])
+
+  // Subscribe to container-level hover so timers pause when hovering anywhere in the stack
+  useEffect(() => {
+    return subscribeContainerHovered((h) => {
+      containerHoveredRef.current = h
+      setContainerHoveredState(h)
+    })
+  }, [])
 
   // Push current animated state to SVG DOM + constrain wrapper/content
   // NOTE: We intentionally do NOT set style.height on the wrapper.
@@ -699,8 +746,8 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     const fullDelay = displayMs - expandDelayMs - collapseMs
     if (fullDelay <= 0) return
 
-    // Don't start timer while hovered — pause and resume on unhover
-    if (hoveredRef.current) return
+    // Don't start timer while hovered (individual or container) — pause and resume on unhover
+    if (hoveredRef.current || containerHoveredRef.current) return
 
     const delay = remainingRef.current ?? fullDelay
     timerStartRef.current = Date.now()
@@ -719,17 +766,17 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       // Save remaining time when cleaning up (e.g. hover started)
       const elapsed = Date.now() - timerStartRef.current
       const remaining = delay - elapsed
-      if (remaining > 0 && hoveredRef.current) {
+      if (remaining > 0 && (hoveredRef.current || containerHoveredRef.current)) {
         remainingRef.current = remaining
       }
     }
-  }, [showBody, actionSuccess, dismissing, prefersReducedMotion, hovered])
+  }, [showBody, actionSuccess, dismissing, prefersReducedMotion, hovered, containerHovered])
 
-  // Re-expand on hover: if collapsed/collapsing and user hovers, reverse it
+  // Re-expand on hover: if collapsed/collapsing and user hovers (individual or container), reverse it
   const canExpand = hasDescription || hasAction
   const reExpandingRef = useRef(false)
   useEffect(() => {
-    if (!hovered || !canExpand || !dismissing) return
+    if ((!hovered && !containerHovered) || !canExpand || !dismissing) return
     // Stop collapse morph, reset state
     morphCtrl.current?.stop()
     collapsingRef.current = false
@@ -766,22 +813,28 @@ export const GoeyToast: FC<GoeyToastProps> = ({
           aDims.current = { ...dimsRef.current }
           reExpandingRef.current = false
           flush()
-          syncSonnerHeights(wrapperRef.current)
+          syncSonnerHeights(wrapperRef.current, true)
         },
       })
     })
 
     return () => { morphCtrl.current?.stop() }
-  }, [hovered, dismissing, canExpand])
+  }, [hovered, containerHovered, dismissing, canExpand])
 
-  // Dismiss from Sonner after collapse completes and user is not hovering
+  // Dismiss from Sonner after collapse completes.
+  // Re-expand calls setDismissing(false) → effect cleanup cancels this timer.
+  // But there's a narrow race: user hovers AFTER showBody=false but BEFORE
+  // React processes the re-expand state update. Guard with refs (synchronously
+  // set on mouseenter) so dismiss is always skipped if cursor is on the stack.
   useEffect(() => {
-    if (!toastId || !dismissing || showBody || hovered) return
+    if (!toastId || !dismissing || showBody) return
     const t = setTimeout(() => {
-      if (!hoveredRef.current) sonnerToast.dismiss(toastId)
+      if (!hoveredRef.current && !containerHoveredRef.current) {
+        sonnerToast.dismiss(toastId)
+      }
     }, 800)
     return () => clearTimeout(t)
-  }, [dismissing, showBody, hovered, toastId])
+  }, [dismissing, showBody, toastId])
 
   // Dismiss after action success morph-back completes
   useEffect(() => {
@@ -807,7 +860,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       morphTRef.current = 1
       aDims.current = { ...dimsRef.current }
       flush()
-      syncSonnerHeights(wrapperRef.current)
+      syncSonnerHeights(wrapperRef.current, true)
       return
     }
 
@@ -836,7 +889,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
           morphTRef.current = 1
           aDims.current = { ...dimsRef.current }
           flush()
-          syncSonnerHeights(wrapperRef.current)
+          syncSonnerHeights(wrapperRef.current, true)
         },
       })
     })
@@ -901,9 +954,41 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     const ol = wrapper.closest('[data-sonner-toast]')?.parentElement
     if (!ol) return
 
-    return registerSonnerObserver(ol, () => {
+    // Per-rAF sync: corrects --initial-height so CSS height transitions target
+    // the right value. Does NOT update --offset (see syncSonnerHeights comment).
+    const unregister = registerSonnerObserver(ol, () => {
       syncSonnerHeights(wrapper)
     })
+
+    // Immediate sync when Sonner expands the stack (data-expanded → true).
+    // MutationObserver callbacks are microtasks — they run before the next paint,
+    // so --offset is corrected before the first CSS transition frame renders.
+    // This handles the case where the user hovers before any morph has completed
+    // (i.e., --offset was never set from an onComplete lifecycle event yet).
+    const expandObs = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (
+          m.type === 'attributes' &&
+          m.attributeName === 'data-expanded' &&
+          (m.target as HTMLElement).getAttribute('data-expanded') === 'true'
+        ) {
+          // isExpandTrigger=true: fires as microtask before first CSS paint,
+          // so --offset is set to correct values before the transition starts.
+          syncSonnerHeights(wrapper, true, true)
+          break
+        }
+      }
+    })
+    expandObs.observe(ol, {
+      attributes: true,
+      attributeFilter: ['data-expanded'],
+      subtree: true,
+    })
+
+    return () => {
+      unregister()
+      expandObs.disconnect()
+    }
   }, [])
 
   // Action button handler
