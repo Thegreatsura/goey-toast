@@ -28,6 +28,16 @@ export function getGoeyBounce() {
   return _bounce
 }
 
+let _visibleToasts = 3
+
+export function setGoeyVisibleToasts(n: number) {
+  _visibleToasts = n
+}
+
+export function getGoeyVisibleToasts() {
+  return _visibleToasts
+}
+
 // ---------------------------------------------------------------------------
 // Container hover — broadcast from GoeyToaster to all mounted GoeyToast instances
 // so timers pause and re-expand triggers correctly when hovering the stack.

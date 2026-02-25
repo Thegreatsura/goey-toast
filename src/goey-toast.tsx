@@ -1,7 +1,8 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { GoeyToast } from './components/GoeyToast'
 import { ToastErrorBoundary } from './components/ToastErrorBoundary'
+import { getGoeyVisibleToasts } from './context'
 import type {
   GoeyToastOptions,
   GoeyPromiseData,
@@ -13,6 +14,33 @@ import type {
 } from './types'
 
 const DEFAULT_EXPANDED_DURATION = 4000
+
+// ---------------------------------------------------------------------------
+// Toast queue — limits concurrent toasts to `visibleToasts` (default 3).
+// Excess toasts wait in a FIFO queue and fire when a slot opens.
+// ---------------------------------------------------------------------------
+const _activeIds = new Set<string | number>()
+const _queue: Array<{ id: string | number; create: () => void }> = []
+
+/** @internal Reset queue state — exported for tests only. */
+export function _resetQueue() {
+  _activeIds.clear()
+  _queue.length = 0
+}
+
+function _processQueue() {
+  const max = getGoeyVisibleToasts()
+  while (_queue.length > 0 && _activeIds.size < max) {
+    const next = _queue.shift()!
+    _activeIds.add(next.id)
+    next.create()
+  }
+}
+
+function _onToastDismissed(id: string | number) {
+  if (!_activeIds.delete(id)) return
+  _processQueue()
+}
 
 function GoeyToastWrapper({
   initialPhase,
@@ -29,6 +57,7 @@ function GoeyToastWrapper({
   spring,
   bounce,
   toastId,
+  activeId,
 }: {
   initialPhase: GoeyToastPhase
   title: string
@@ -44,7 +73,22 @@ function GoeyToastWrapper({
   spring?: boolean
   bounce?: number
   toastId?: string | number
+  activeId: string | number
 }) {
+  // Guarantee the queue slot is freed when this toast unmounts from Sonner's DOM.
+  // Uses a mounted ref + delayed check to survive React StrictMode's dev-only
+  // double-mount cycle (mount → unmount → remount) without prematurely freeing the slot.
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      setTimeout(() => {
+        if (!mountedRef.current) _onToastDismissed(activeId)
+      }, 100)
+    }
+  }, [activeId])
+
   return (
     <ToastErrorBoundary>
       <GoeyToast
@@ -80,6 +124,18 @@ function PromiseToastWrapper<T>({
   const [title, setTitle] = useState(data.loading)
   const [description, setDescription] = useState<ReactNode | undefined>(data.description?.loading)
   const [action, setAction] = useState<GoeyToastAction | undefined>(undefined)
+
+  // Guarantee the queue slot is freed when this toast unmounts from Sonner's DOM.
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      setTimeout(() => {
+        if (!mountedRef.current) _onToastDismissed(toastId)
+      }, 100)
+    }
+  }, [toastId])
 
   useEffect(() => {
     const resetDuration = (hasExpandedContent: boolean) => {
@@ -155,30 +211,60 @@ function createGoeyToast(
 
   const toastId = options?.id ?? Math.random().toString(36).slice(2)
 
-  return toast.custom(
-    () => (
-      <GoeyToastWrapper
-        initialPhase={type}
-        title={title}
-        type={type}
-        description={options?.description}
-        action={options?.action}
-        icon={options?.icon}
-        classNames={options?.classNames}
-        fillColor={options?.fillColor}
-        borderColor={options?.borderColor}
-        borderWidth={options?.borderWidth}
-        timing={options?.timing}
-        spring={options?.spring}
-        bounce={options?.bounce}
-        toastId={hasExpandedContent ? toastId : undefined}
-      />
-    ),
-    {
-      duration,
-      id: toastId,
+  const create = () => {
+    toast.custom(
+      () => (
+        <GoeyToastWrapper
+          initialPhase={type}
+          title={title}
+          type={type}
+          description={options?.description}
+          action={options?.action}
+          icon={options?.icon}
+          classNames={options?.classNames}
+          fillColor={options?.fillColor}
+          borderColor={options?.borderColor}
+          borderWidth={options?.borderWidth}
+          timing={options?.timing}
+          spring={options?.spring}
+          bounce={options?.bounce}
+          toastId={hasExpandedContent ? toastId : undefined}
+          activeId={toastId}
+        />
+      ),
+      {
+        duration,
+        id: toastId,
+      }
+    )
+  }
+
+  if (_activeIds.size < getGoeyVisibleToasts()) {
+    _activeIds.add(toastId)
+    create()
+  } else {
+    _queue.push({ id: toastId, create })
+  }
+
+  return toastId
+}
+
+function dismissGoeyToast(id?: string | number) {
+  if (id != null) {
+    // Remove from queue if queued
+    const idx = _queue.findIndex(q => q.id === id)
+    if (idx !== -1) {
+      _queue.splice(idx, 1)
+      return
     }
-  )
+    // Dismiss from Sonner — unmount cleanup in GoeyToastWrapper handles activeIds + queue
+    toast.dismiss(id)
+  } else {
+    // Dismiss all: clear queue and dismiss all active toasts
+    _queue.length = 0
+    _activeIds.clear()
+    toast.dismiss()
+  }
 }
 
 export const goeyToast = Object.assign(
@@ -195,13 +281,25 @@ export const goeyToast = Object.assign(
       createGoeyToast(title, 'info', options),
     promise: <T,>(promise: Promise<T>, data: GoeyPromiseData<T>) => {
       const id = Math.random().toString(36).slice(2)
-      return toast.custom(() => (
-        <PromiseToastWrapper promise={promise} data={data} toastId={id} />
-      ), {
-        id,
-        duration: (data.timing?.displayDuration != null || data.description) ? Infinity : undefined,
-      })
+
+      const create = () => {
+        toast.custom(() => (
+          <PromiseToastWrapper promise={promise} data={data} toastId={id} />
+        ), {
+          id,
+          duration: (data.timing?.displayDuration != null || data.description) ? Infinity : undefined,
+        })
+      }
+
+      if (_activeIds.size < getGoeyVisibleToasts()) {
+        _activeIds.add(id)
+        create()
+      } else {
+        _queue.push({ id, create })
+      }
+
+      return id
     },
-    dismiss: toast.dismiss,
+    dismiss: dismissGoeyToast,
   }
 )

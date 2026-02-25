@@ -20,6 +20,16 @@
 /* Style detection marker — used by GoeyToaster to verify CSS is loaded */
 [data-goey-toast-css] { --goey-toast: 1; }
 
+/* When Sonner expands the stack (hover), shorten height/transform CSS transitions
+   so our syncSonnerHeights corrections apply quickly (~150ms instead of 400ms).
+   Sonner writes stale --offset values from its React state; 400ms correction
+   causes visible overlap. 150ms is fast enough to prevent overlap while keeping
+   stacking spread and entry animations smooth. */
+[data-sonner-toast][data-expanded="true"] {
+  transition: transform 0.15s, opacity 0.4s, height 0.15s, box-shadow 0.2s !important;
+}
+
+
 /* ============================================
    Wrapper — single container for both states
    ============================================ */

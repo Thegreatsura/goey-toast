@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Toaster } from 'sonner'
 import type { GoeyToasterProps } from '../types'
-import { setGoeyPosition, setGoeySpring, setGoeyBounce, setContainerHovered } from '../context'
+import { setGoeyPosition, setGoeySpring, setGoeyBounce, setGoeyVisibleToasts, setContainerHovered } from '../context'
 
 export function GoeyToaster({
   position = 'bottom-right',
@@ -30,43 +30,52 @@ export function GoeyToaster({
     setGoeyBounce(bounce)
   }, [bounce])
 
-  // Detect hover on the Sonner container and broadcast to all GoeyToast instances.
-  // This ensures timers pause and re-expand fires when hovering any part of the stack,
-  // not just the individual toast wrapper the cursor happens to be directly over.
   useEffect(() => {
-    const onEnter = () => setContainerHovered(true)
-    const onLeave = () => setContainerHovered(false)
+    setGoeyVisibleToasts(visibleToasts ?? 3)
+  }, [visibleToasts])
 
-    const attach = (el: HTMLElement) => {
-      el.addEventListener('mouseenter', onEnter)
-      el.addEventListener('mouseleave', onLeave)
+  // Detect hover on the Sonner container and broadcast to all GoeyToast instances.
+  // Uses Sonner's `data-expanded` attribute (set per-toast <li>) as the hover signal
+  // rather than raw mouseenter/mouseleave on the <ol>. This is more reliable because
+  // Sonner manages it with onMouseEnter + onMouseMove + onMouseLeave, and it survives
+  // <ol> remounts (all toasts dismissed then new ones appear).
+  useEffect(() => {
+    let expandObs: MutationObserver | null = null
+    let currentOl: HTMLElement | null = null
+
+    const syncFromExpanded = (ol: HTMLElement) => {
+      const anyExpanded = ol.querySelector('[data-sonner-toast][data-expanded="true"]') !== null
+      setContainerHovered(anyExpanded)
     }
 
-    // The [data-sonner-toaster] element may not exist yet — wait for it.
-    let el = document.querySelector<HTMLElement>('[data-sonner-toaster]')
-    if (el) {
-      attach(el)
-      return () => {
-        el!.removeEventListener('mouseenter', onEnter)
-        el!.removeEventListener('mouseleave', onLeave)
-        setContainerHovered(false)
-      }
+    const attach = (ol: HTMLElement) => {
+      if (ol === currentOl) return
+      expandObs?.disconnect()
+      currentOl = ol
+      expandObs = new MutationObserver(() => syncFromExpanded(ol))
+      expandObs.observe(ol, { attributes: true, attributeFilter: ['data-expanded'], subtree: true })
+      syncFromExpanded(ol)
     }
 
-    const obs = new MutationObserver(() => {
+    const el = document.querySelector<HTMLElement>('[data-sonner-toaster]')
+    if (el) attach(el)
+
+    // Re-discover if the <ol> is remounted (e.g. all toasts dismissed then new ones appear)
+    const bodyObs = new MutationObserver(() => {
       const found = document.querySelector<HTMLElement>('[data-sonner-toaster]')
       if (found) {
-        obs.disconnect()
-        el = found
-        attach(el)
+        attach(found)
+      } else if (currentOl) {
+        expandObs?.disconnect()
+        currentOl = null
+        setContainerHovered(false)
       }
     })
-    obs.observe(document.body, { childList: true, subtree: true })
+    bodyObs.observe(document.body, { childList: true, subtree: true })
 
     return () => {
-      obs.disconnect()
-      el?.removeEventListener('mouseenter', onEnter)
-      el?.removeEventListener('mouseleave', onLeave)
+      bodyObs.disconnect()
+      expandObs?.disconnect()
       setContainerHovered(false)
     }
   }, [])
@@ -105,7 +114,7 @@ export function GoeyToaster({
       expand={expand}
       closeButton={closeButton}
       richColors={richColors}
-      visibleToasts={visibleToasts}
+      visibleToasts={99}
       dir={dir}
     />
   )

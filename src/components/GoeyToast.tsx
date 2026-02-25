@@ -92,7 +92,7 @@ function registerSonnerObserver(ol: Element, callback: () => void) {
     })
     observer.observe(ol, {
       attributes: true,
-      attributeFilter: ['style'],
+      attributeFilter: ['style', 'data-visible'],
       subtree: true,
       childList: true,
     })
@@ -113,15 +113,11 @@ function registerSonnerObserver(ol: Element, callback: () => void) {
  * Recalculates CSS variables on all sibling toast <li> elements.
  *
  * Sonner measures height once on mount (~34px pill) and never re-measures
- * toast.custom() content. This function corrects that.
+ * toast.custom() content. This function corrects --initial-height and --offset
+ * so our morphing toasts stack correctly.
  *
- * Parameters:
- * - `includeOffsets` — also recompute --offset (not just --initial-height).
- * - `isExpandTrigger` — this call is from the expandObs microtask (fires the
- *   moment data-expanded becomes true, before the first CSS paint). These calls
- *   ALWAYS write offsets. Lifecycle onComplete calls (isExpandTrigger=false)
- *   skip offset writes when the stack is already expanded, to avoid re-targeting
- *   the CSS transform transition mid-flight and causing "sliding" jank.
+ * When expanded (hovered), CSS transitions on [data-expanded="true"] are
+ * overridden (GoeyToast.css) so writing these values takes effect instantly.
  *
  * DOM order: oldest toast at index 0, newest (front) at index n-1.
  * Front toast has --offset: 0; each older toast accumulates the heights of all
@@ -130,7 +126,6 @@ function registerSonnerObserver(ol: Element, callback: () => void) {
 function syncSonnerHeights(
   wrapperEl: HTMLElement | null,
   includeOffsets = false,
-  isExpandTrigger = false,
 ) {
   if (!wrapperEl) return
   const li = wrapperEl.closest('[data-sonner-toast]') as HTMLElement | null
@@ -144,32 +139,58 @@ function syncSonnerHeights(
   if (toasts.length === 0) return
 
   // Measure actual rendered height of each toast's content wrapper.
+  // Invisible toasts (beyond Sonner's visibleToasts limit) get height 0
+  // so they don't create a gap in the layout or affect offset calculations.
   const heights = toasts.map(t => {
+    if (t.getAttribute('data-visible') === 'false') return 0
     const content = t.firstElementChild as HTMLElement | null
     const h = content ? content.getBoundingClientRect().height : 0
     return h > 0 ? h : PH
   })
+
+  // When expanded (hovered), temporarily kill CSS transitions so offset
+  // corrections apply in this paint — prevents overlap flash. The CSS shortens
+  // transitions to 150ms (GoeyToast.css) for Sonner's own changes, but our
+  // corrections must be truly instant since getBoundingClientRect above forces
+  // a layout that "locks in" stale values.
+  const isExpanded = includeOffsets && toasts[0]?.getAttribute('data-expanded') === 'true'
+  if (isExpanded) {
+    for (const t of toasts) t.style.setProperty('transition', 'none', 'important')
+  }
 
   // Always update --initial-height (the CSS height transition target).
   for (let i = 0; i < toasts.length; i++) {
     toasts[i].style.setProperty('--initial-height', `${heights[i]}px`)
   }
 
-  if (!includeOffsets) return
+  if (!includeOffsets) {
+    if (isExpanded) {
+      for (const t of toasts) t.style.removeProperty('transition')
+    }
+    return
+  }
 
-  // Safe to always update --offset here. The only callers with includeOffsets=true are:
-  // - expandObs (isExpandTrigger=true): fires at t=0ms as microtask before first paint
-  // - morph onComplete: fires at ~900ms+ after expansion, well after Sonner's 400ms
-  //   CSS transform transition has completed. No active transition to fight.
   const gapStr = getComputedStyle(ol).getPropertyValue('--gap').trim()
   const gap = parseFloat(gapStr) || 14
 
   let runningOffset = 0
   for (let i = toasts.length - 1; i >= 0; i--) {
+    // Invisible toasts: collapse to base position, don't contribute to offset
+    if (toasts[i].getAttribute('data-visible') === 'false') {
+      toasts[i].style.setProperty('--offset', '0px')
+      continue
+    }
     toasts[i].style.setProperty('--offset', `${runningOffset}px`)
     if (i > 0) {
       runningOffset += heights[i] + gap
     }
+  }
+
+  if (isExpanded) {
+    // Force reflow so browser applies corrected values without transitions,
+    // then restore transitions for Sonner's own future animations.
+    void ol.offsetHeight
+    for (const t of toasts) t.style.removeProperty('transition')
   }
 }
 
@@ -714,6 +735,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
             th: targetDims.th + (savedDims.th - targetDims.th) * t,
           }
           flush()
+          syncSonnerHeights(wrapperRef.current, true)
         },
         onComplete: () => {
           morphTRef.current = 0
@@ -722,6 +744,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
           collapseEndTime.current = Date.now()
           aDims.current = { ...targetDims }
           flush()
+          syncSonnerHeights(wrapperRef.current, true)
           setShowBody(false)
         },
       })
@@ -753,6 +776,13 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     timerStartRef.current = Date.now()
 
     const timer = setTimeout(() => {
+      // Guard: hover refs update synchronously (before React re-renders),
+      // so check them to avoid starting collapse when user just hovered.
+      if (hoveredRef.current || containerHoveredRef.current) {
+        const elapsed = Date.now() - timerStartRef.current
+        remainingRef.current = Math.max(0, delay - elapsed)
+        return
+      }
       remainingRef.current = null
       expandedDimsRef.current = { ...aDims.current }
       collapsingRef.current = true
@@ -807,6 +837,10 @@ export const GoeyToast: FC<GoeyToastProps> = ({
             th: startDims.th + (target.th - startDims.th) * t,
           }
           flush()
+          // Keep offsets in sync as heights grow so toasts don't overlap mid-morph.
+          // During initial expand, expandObs handles this, but during re-expand the
+          // heights start at mid-collapse values and offsets go stale without this.
+          syncSonnerHeights(wrapperRef.current, true)
         },
         onComplete: () => {
           morphTRef.current = 1
@@ -884,6 +918,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
             th: startDims.th + (target.th - startDims.th) * t,
           }
           flush()
+          syncSonnerHeights(wrapperRef.current, true)
         },
         onComplete: () => {
           morphTRef.current = 1
@@ -954,17 +989,17 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     const ol = wrapper.closest('[data-sonner-toast]')?.parentElement
     if (!ol) return
 
-    // Per-rAF sync: corrects --initial-height so CSS height transitions target
-    // the right value. Does NOT update --offset (see syncSonnerHeights comment).
+    // Per-rAF sync: corrects --initial-height AND --offset every time Sonner
+    // overwrites them with stale values from its React state.
+    // When expanded, CSS transitions are disabled (GoeyToast.css) so corrections
+    // apply instantly without re-targeting a CSS transition mid-flight.
     const unregister = registerSonnerObserver(ol, () => {
-      syncSonnerHeights(wrapper)
+      syncSonnerHeights(wrapper, true)
     })
 
     // Immediate sync when Sonner expands the stack (data-expanded → true).
     // MutationObserver callbacks are microtasks — they run before the next paint,
     // so --offset is corrected before the first CSS transition frame renders.
-    // This handles the case where the user hovers before any morph has completed
-    // (i.e., --offset was never set from an onComplete lifecycle event yet).
     const expandObs = new MutationObserver((mutations) => {
       for (const m of mutations) {
         if (
@@ -972,9 +1007,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
           m.attributeName === 'data-expanded' &&
           (m.target as HTMLElement).getAttribute('data-expanded') === 'true'
         ) {
-          // isExpandTrigger=true: fires as microtask before first CSS paint,
-          // so --offset is set to correct values before the transition starts.
-          syncSonnerHeights(wrapper, true, true)
+          syncSonnerHeights(wrapper, true)
           break
         }
       }
