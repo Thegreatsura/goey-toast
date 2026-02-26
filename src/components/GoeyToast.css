@@ -65,6 +65,7 @@
 
 .goey-contentExpanded {
   padding: 7px 10px 16px 10px;
+  min-width: 300px;
   max-width: 380px;
 }
 
@@ -104,12 +105,21 @@
 .goey-titleInfo { color: #1E88E5; }
 .goey-titleLoading { color: #555; }
 
+.goey-timestamp {
+  font-size: 11px;
+  font-weight: 400;
+  color: #999;
+  white-space: nowrap;
+  line-height: 1;
+  padding-left: 6px;
+}
+
 .goey-description {
   font-size: 13px;
   font-weight: 400;
   color: #444;
   line-height: 1.55;
-  margin-top: 12px;
+  margin-top: 16px;
   overflow: hidden;
 }
 
@@ -180,56 +190,103 @@
 .goey-actionInfo:active { background: #64B5F6; }
 
 /* ============================================
+   Progress countdown bar
+   ============================================ */
+.goey-progressWrapper {
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 2px;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.goey-progressBar {
+  height: 100%;
+  border-radius: 2px;
+  transform-origin: left center;
+  animation: goey-progress-shrink var(--goey-progress-duration, 4000ms) linear forwards;
+  animation-play-state: running;
+}
+
+.goey-progressPaused .goey-progressBar {
+  animation-play-state: paused;
+}
+
+@keyframes goey-progress-shrink {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.goey-progressDefault { background: #999; }
+.goey-progressSuccess { background: #4CAF50; }
+.goey-progressError { background: #E53935; }
+.goey-progressWarning { background: #C49000; }
+.goey-progressInfo { background: #1E88E5; }
+
+/* ============================================
    Dark mode
    ============================================ */
 
-[data-sonner-toaster][data-theme="dark"] .goey-blobSvg {
+.goey-wrapper[data-theme="dark"] .goey-blobSvg {
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.3))
           drop-shadow(0 1px 4px rgba(0, 0, 0, 0.2));
 }
 
-[data-sonner-toaster][data-theme="dark"] .goey-titleDefault { color: #ccc; }
-[data-sonner-toaster][data-theme="dark"] .goey-titleSuccess { color: #66BB6A; }
-[data-sonner-toaster][data-theme="dark"] .goey-titleError { color: #EF5350; }
-[data-sonner-toaster][data-theme="dark"] .goey-titleWarning { color: #FFB300; }
-[data-sonner-toaster][data-theme="dark"] .goey-titleInfo { color: #42A5F5; }
-[data-sonner-toaster][data-theme="dark"] .goey-titleLoading { color: #ccc; }
+.goey-wrapper[data-theme="dark"] .goey-titleDefault { color: #ccc; }
+.goey-wrapper[data-theme="dark"] .goey-titleSuccess { color: #66BB6A; }
+.goey-wrapper[data-theme="dark"] .goey-titleError { color: #EF5350; }
+.goey-wrapper[data-theme="dark"] .goey-titleWarning { color: #FFB300; }
+.goey-wrapper[data-theme="dark"] .goey-titleInfo { color: #42A5F5; }
+.goey-wrapper[data-theme="dark"] .goey-titleLoading { color: #ccc; }
 
-[data-sonner-toaster][data-theme="dark"] .goey-description {
-  color: #aaa;
+.goey-wrapper[data-theme="dark"] .goey-timestamp {
+  color: #777;
 }
 
-[data-sonner-toaster][data-theme="dark"] .goey-actionDefault {
+.goey-wrapper[data-theme="dark"] .goey-description {
+  color: #e0e0e0;
+}
+
+.goey-wrapper[data-theme="dark"] .goey-actionDefault {
   background: #3a3a3a;
   color: #ccc;
 }
-[data-sonner-toaster][data-theme="dark"] .goey-actionDefault:hover { background: #444; }
-[data-sonner-toaster][data-theme="dark"] .goey-actionDefault:active { background: #4e4e4e; }
+.goey-wrapper[data-theme="dark"] .goey-actionDefault:hover { background: #444; }
+.goey-wrapper[data-theme="dark"] .goey-actionDefault:active { background: #4e4e4e; }
 
-[data-sonner-toaster][data-theme="dark"] .goey-actionSuccess {
+.goey-wrapper[data-theme="dark"] .goey-actionSuccess {
   background: #1b5e20;
   color: #66BB6A;
 }
-[data-sonner-toaster][data-theme="dark"] .goey-actionSuccess:hover { background: #2e7d32; }
-[data-sonner-toaster][data-theme="dark"] .goey-actionSuccess:active { background: #388e3c; }
+.goey-wrapper[data-theme="dark"] .goey-actionSuccess:hover { background: #2e7d32; }
+.goey-wrapper[data-theme="dark"] .goey-actionSuccess:active { background: #388e3c; }
 
-[data-sonner-toaster][data-theme="dark"] .goey-actionError {
+.goey-wrapper[data-theme="dark"] .goey-actionError {
   background: #b71c1c;
   color: #EF5350;
 }
-[data-sonner-toaster][data-theme="dark"] .goey-actionError:hover { background: #c62828; }
-[data-sonner-toaster][data-theme="dark"] .goey-actionError:active { background: #d32f2f; }
+.goey-wrapper[data-theme="dark"] .goey-actionError:hover { background: #c62828; }
+.goey-wrapper[data-theme="dark"] .goey-actionError:active { background: #d32f2f; }
 
-[data-sonner-toaster][data-theme="dark"] .goey-actionWarning {
+.goey-wrapper[data-theme="dark"] .goey-actionWarning {
   background: #4a3800;
   color: #FFB300;
 }
-[data-sonner-toaster][data-theme="dark"] .goey-actionWarning:hover { background: #5c4600; }
-[data-sonner-toaster][data-theme="dark"] .goey-actionWarning:active { background: #6e5400; }
+.goey-wrapper[data-theme="dark"] .goey-actionWarning:hover { background: #5c4600; }
+.goey-wrapper[data-theme="dark"] .goey-actionWarning:active { background: #6e5400; }
 
-[data-sonner-toaster][data-theme="dark"] .goey-actionInfo {
+.goey-wrapper[data-theme="dark"] .goey-actionInfo {
   background: #0d47a1;
   color: #42A5F5;
 }
-[data-sonner-toaster][data-theme="dark"] .goey-actionInfo:hover { background: #1565c0; }
-[data-sonner-toaster][data-theme="dark"] .goey-actionInfo:active { background: #1976d2; }
+.goey-wrapper[data-theme="dark"] .goey-actionInfo:hover { background: #1565c0; }
+.goey-wrapper[data-theme="dark"] .goey-actionInfo:active { background: #1976d2; }
+
+.goey-wrapper[data-theme="dark"] .goey-progressWrapper {
+  background: rgba(255, 255, 255, 0.1);
+}
+.goey-wrapper[data-theme="dark"] .goey-progressDefault { background: #888; }
+.goey-wrapper[data-theme="dark"] .goey-progressSuccess { background: #66BB6A; }
+.goey-wrapper[data-theme="dark"] .goey-progressError { background: #EF5350; }
+.goey-wrapper[data-theme="dark"] .goey-progressWarning { background: #FFB300; }
+.goey-wrapper[data-theme="dark"] .goey-progressInfo { background: #42A5F5; }

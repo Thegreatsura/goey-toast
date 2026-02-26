@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
-import { GoeyToaster, goeyToast } from 'goey-toast'
-import type { GoeyToastOptions, GoeyToasterProps } from 'goey-toast'
+import { GoeyToaster, goeyToast, animationPresets } from 'goey-toast'
+import type { GoeyToastOptions, GoeyToasterProps, AnimationPresetName, GoeyToastUpdateOptions, DismissFilter } from 'goey-toast'
 import { Analytics } from '@vercel/analytics/react'
 import 'goey-toast/styles.css'
 import './App.css'
@@ -89,13 +89,15 @@ function useCopy() {
 
 const DEMO_DEFAULTS = {
   spring: true,
+  bounce: 0.3,
   timing: {
-    displayDuration: 3000,
+    displayDuration: 5000,
   },
 } satisfies GoeyToastOptions
 
 const TOAST_TYPES: ToastType[] = ['default', 'success', 'error', 'warning', 'info']
 const POSITIONS: GoeyToasterProps['position'][] = ['top-left', 'top-center', 'top-right', 'bottom-left', 'bottom-center', 'bottom-right']
+const PRESET_NAMES: AnimationPresetName[] = ['smooth', 'bouncy', 'subtle', 'snappy']
 
 function App() {
   const installCopy = useCopy()
@@ -143,6 +145,10 @@ function App() {
   const [bDisplayDuration, setBDisplayDuration] = useState(4000)
   const [bSpring, setBSpring] = useState(true)
   const [bBounce, setBBounce] = useState(0.4)
+  const [bPreset, setBPreset] = useState<AnimationPresetName | null>(null)
+  const [bTheme, setBTheme] = useState<'light' | 'dark'>('light')
+  const [bShowProgress, setBShowProgress] = useState(false)
+  const [bCloseOnEscape, setBCloseOnEscape] = useState(true)
 
   // Close mobile menu on page change
   useEffect(() => {
@@ -176,8 +182,13 @@ function App() {
     if (bDisplayDuration !== 4000) {
       options.timing = { displayDuration: bDisplayDuration }
     }
-    if (!bSpring) options.spring = false
-    options.bounce = bBounce
+    if (bPreset) {
+      options.preset = bPreset
+    } else {
+      if (!bSpring) options.spring = false
+      options.bounce = bBounce
+    }
+    if (bShowProgress) options.showProgress = true
 
     if (bType === 'default') goeyToast(bTitle, options)
     else goeyToast[bType](bTitle, options)
@@ -187,12 +198,17 @@ function App() {
     const lines: string[] = []
     const hasFill = bFillColor !== '#ffffff'
     const hasBorder = bHasBorder && bBorderColor
-    const hasSpringOff = !bSpring
-    const hasBounce = bBounce !== 0.4
-    const hasOpts = bHasDesc || bHasAction || hasFill || hasBorder || hasSpringOff || hasBounce
+    const hasPreset = bPreset != null
+    const hasSpringOff = !hasPreset && !bSpring
+    const hasBounce = !hasPreset && bBounce !== 0.4
+    const hasOpts = bHasDesc || bHasAction || hasFill || hasBorder || hasPreset || hasSpringOff || hasBounce || bShowProgress
     const call = bType === 'default' ? 'goeyToast' : `goeyToast.${bType}`
 
-    lines.push(`<GoeyToaster position="${bPosition}" />`)
+    const toasterProps = [`position="${bPosition}"`]
+    if (bTheme !== 'light') toasterProps.push(`theme="${bTheme}"`)
+    if (bShowProgress) toasterProps.push('showProgress')
+    if (!bCloseOnEscape) toasterProps.push('closeOnEscape={false}')
+    lines.push(`<GoeyToaster ${toasterProps.join(' ')} />`)
     lines.push('')
     if (!hasOpts) {
       lines.push(`${call}('${bTitle}')`)
@@ -210,8 +226,10 @@ function App() {
         lines.push(`  borderColor: '${bBorderColor}',`)
         lines.push(`  borderWidth: ${bBorderWidth},`)
       }
+      if (hasPreset) lines.push(`  preset: '${bPreset}',`)
       if (hasSpringOff) lines.push(`  spring: false,`)
       if (hasBounce) lines.push(`  bounce: ${bBounce},`)
+      if (bShowProgress) lines.push(`  showProgress: true,`)
       if (bDisplayDuration !== 4000) {
         lines.push(`  timing: {`)
         lines.push(`    displayDuration: ${bDisplayDuration},`)
@@ -225,7 +243,12 @@ function App() {
   return (
     <>
       <Analytics />
-      <GoeyToaster position={bPosition} />
+      <GoeyToaster
+        position={bPosition}
+        theme={bTheme}
+        showProgress={bShowProgress}
+        closeOnEscape={bCloseOnEscape}
+      />
 
       {/* Header */}
       <header className={`site-header${!heroVisible && page === 'home' ? ' header--hero-hidden' : ''}`}>
@@ -291,8 +314,122 @@ function App() {
 
           <div className="changelog-entry">
             <div className="changelog-version">
+              <span className="changelog-tag">v0.2.2</span>
+              <span className="changelog-date">Feb 26, 2026</span>
+            </div>
+            <div className="changelog-body">
+              <h4>Accessibility, Presets, Dark Mode & More</h4>
+              <ul>
+                <li>Named animation presets: <code>smooth</code>, <code>bouncy</code>, <code>subtle</code>, <code>snappy</code></li>
+                <li>Swipe-to-dismiss touch gesture support for mobile devices</li>
+                <li>ARIA live region announcements for screen reader accessibility</li>
+                <li>SSR compatibility with isomorphic <code>useLayoutEffect</code></li>
+                <li>Performance: memoized SVG morph paths and debounced height sync</li>
+                <li>Escape key dismiss with <code>closeOnEscape</code> prop (default on)</li>
+                <li>Toast update API: <code>goeyToast.update(id, options)</code> for in-place updates (supports icon override)</li>
+                <li>Dark mode theme support via <code>theme</code> prop</li>
+                <li>Dismiss by type: <code>goeyToast.dismiss({'{ type }'})</code> filter</li>
+                <li>Progress countdown bar with <code>showProgress</code> prop and hover pause</li>
+                <li>Re-expand on hover after progress bar completes with animation reset</li>
+                <li>Timestamp display on toasts (local time with seconds)</li>
+                <li>Max queue overflow control: <code>maxQueue</code> and <code>queueOverflow</code> props</li>
+                <li><code>onDismiss</code> and <code>onAutoClose</code> callback support</li>
+                <li>Softer collapse bounce to prevent text clipping</li>
+                <li>Wider expanded toast body (300px min-width)</li>
+                <li>Fixed promise toast test failures (queue state reset)</li>
+                <li>Preset selector in interactive builder</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="changelog-entry">
+            <div className="changelog-version">
+              <span className="changelog-tag">v0.2.1</span>
+              <span className="changelog-date">Feb 24, 2026</span>
+            </div>
+            <div className="changelog-body">
+              <h4>Queue System & Stability</h4>
+              <ul>
+                <li>Toast queue system limiting concurrent toasts to <code>visibleToasts</code> (default 3)</li>
+                <li>FIFO queue processing when slots open up</li>
+                <li>Fixed stacked toast hover spacing and dismiss reliability</li>
+                <li>Correct <code>sideEffects</code> in package.json for CSS tree-shaking</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="changelog-entry">
+            <div className="changelog-version">
+              <span className="changelog-tag">v0.2.0</span>
+              <span className="changelog-date">Feb 15, 2026</span>
+            </div>
+            <div className="changelog-body">
+              <h4>Center Positions & Hover Interactions</h4>
+              <ul>
+                <li>Center position support: <code>top-center</code> and <code>bottom-center</code></li>
+                <li>Hover pause and re-expand on collapsed toasts</li>
+                <li>New <code>bounce</code> prop for spring intensity control (0.05–0.8)</li>
+                <li>Simplified timing API (removed fine-tuning timing props)</li>
+                <li>Fixed center position spring overshoot jiggle</li>
+                <li>Fixed action success morph-back and hover re-expand</li>
+                <li>Fixed hover spring loop and center morph collapse</li>
+                <li>Vercel Web Analytics integration</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="changelog-entry">
+            <div className="changelog-version">
+              <span className="changelog-tag">v0.1.5</span>
+              <span className="changelog-date">Feb 15, 2026</span>
+            </div>
+            <div className="changelog-body">
+              <h4>Squish Animations & Builder</h4>
+              <ul>
+                <li>New <code>squishDelay</code> timing prop for more satisfying liquid feel</li>
+                <li>Improved bounce animations for a gooeier effect</li>
+                <li>Simplified interactive builder in demo</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="changelog-entry">
+            <div className="changelog-version">
+              <span className="changelog-tag">v0.1.3</span>
+              <span className="changelog-date">Feb 14, 2026</span>
+            </div>
+            <div className="changelog-body">
+              <h4>Spring Animations & Registry</h4>
+              <ul>
+                <li>Spring option to enable/disable bounce animations</li>
+                <li>shadcn/ui registry support</li>
+                <li>Fixed CSS modules not working in npm build</li>
+                <li>Fixed DTS build with <code>@types/node</code></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="changelog-entry">
+            <div className="changelog-version">
+              <span className="changelog-tag">v0.1.1</span>
+              <span className="changelog-date">Feb 14, 2026</span>
+            </div>
+            <div className="changelog-body">
+              <h4>Squish Effects & Polish</h4>
+              <ul>
+                <li>Gooey squish effects: landing bounce, expand/collapse blob squish</li>
+                <li>Elastic spring on header squish during expand/collapse</li>
+                <li>Dynamic springs, pill resize squish, error shake</li>
+                <li>Skip pill resize squish when toast is about to expand (promise resolve/reject)</li>
+                <li>Demo site with Vercel deployment and OG image</li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="changelog-entry">
+            <div className="changelog-version">
               <span className="changelog-tag">v0.1.0</span>
-              <span className="changelog-date">Feb 2026</span>
+              <span className="changelog-date">Feb 14, 2026</span>
             </div>
             <div className="changelog-body">
               <h4>Initial Release</h4>
@@ -302,14 +439,9 @@ function App() {
                 <li>Description body with string or ReactNode support</li>
                 <li>Action button with optional success label morph-back</li>
                 <li>Promise toasts with loading to success/error transitions</li>
-                <li>Configurable display duration and bounce intensity</li>
-                <li>6 positions: top-left, top-center, top-right, bottom-left, bottom-center, bottom-right</li>
-                <li>Right-side positions auto-mirror the blob horizontally</li>
-                <li>Hover pause: hovering an expanded toast pauses the dismiss timer</li>
-                <li>Hover re-expand: hovering a collapsed pill re-expands the toast</li>
-                <li>Pre-dismiss collapse animation (blob shrinks to pill before exit)</li>
+                <li>Configurable display duration and animation timings</li>
                 <li>Custom fill color, border color, and border width</li>
-                <li>CSS class overrides via classNames prop</li>
+                <li>CSS class overrides via <code>classNames</code> prop</li>
                 <li>Built on Sonner and Framer Motion</li>
               </ul>
             </div>
@@ -323,7 +455,7 @@ function App() {
           {/* Hero */}
           <div className="hero">
             <div className="hero-badge">
-              <span /> v0.2.1
+              <span /> v0.2.2
             </div>
             <h1 ref={heroTitleRef} className={heroLanding ? 'hero-title--landing' : ''}>goey-toast <img src="/mascot.png" alt="mascot" className={`hero-mascot${heroLanding ? ' hero-mascot--landing' : ''}`} /></h1>
             <p className="hero-description">
@@ -437,6 +569,45 @@ function App() {
                 </button>
                 <button onClick={() => goeyToast.promise(sleep(2000), { ...DEMO_DEFAULTS, loading: 'Processing...', success: 'All done!', error: 'Failed', description: { success: 'Your data has been processed and saved successfully.' } })}>
                   Promise + Success (expanded)
+                </button>
+              </div>
+            </div>
+
+            <div className="section">
+              <div className="section-label">Update Toast</div>
+              <div className="buttons">
+                <button onClick={() => {
+                  const spinIcon = <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'goey-spin 1s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.22-8.56" /></svg>
+                  const id = goeyToast('Uploading...', { ...DEMO_DEFAULTS, icon: spinIcon })
+                  setTimeout(() => {
+                    goeyToast.update(id, { title: 'Upload complete!', type: 'success', icon: null, description: 'Your file has been uploaded and processed.' })
+                  }, 2000)
+                }}>
+                  Update Toast
+                </button>
+              </div>
+            </div>
+
+
+            <div className="section">
+              <div className="section-label">Progress Bar</div>
+              <div className="buttons">
+                <button onClick={() => goeyToast.info('Downloading update...', { ...DEMO_DEFAULTS, description: 'This may take a moment.', showProgress: true })}>
+                  Progress Bar
+                </button>
+              </div>
+            </div>
+
+            <div className="section">
+              <div className="section-label">Callbacks</div>
+              <div className="buttons">
+                <button onClick={() => goeyToast.info('Watch me disappear', {
+                  ...DEMO_DEFAULTS,
+                  onDismiss: () => {
+                    goeyToast.success('Previous toast dismissed!', DEMO_DEFAULTS)
+                  },
+                })}>
+                  With Callback
                 </button>
               </div>
             </div>
@@ -609,6 +780,33 @@ function App() {
                 </div>
               </div>
 
+              {/* Animation Preset */}
+              <div className="builder-row">
+                <div className="builder-label">Animation Preset</div>
+                <div className="type-pills">
+                  {PRESET_NAMES.map((p) => (
+                    <button
+                      key={p}
+                      className="type-pill"
+                      data-type="position"
+                      data-active={bPreset === p}
+                      onClick={() => {
+                        if (bPreset === p) {
+                          setBPreset(null)
+                        } else {
+                          setBPreset(p)
+                          const cfg = animationPresets[p]
+                          setBSpring(cfg.spring)
+                          setBBounce(cfg.bounce)
+                        }
+                      }}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Spring Effect */}
               <div className="builder-row">
                 <div className="builder-label">Spring Effect</div>
@@ -616,14 +814,52 @@ function App() {
                   <div className="slider-item">
                     <div className="slider-item-header">
                       <span className="slider-item-label">{bSpring ? `Bounce: ${bBounce.toFixed(2)}` : 'Off'}</span>
-                      <button className="toggle" data-on={bSpring} onClick={() => setBSpring(!bSpring)} style={{ transform: 'scale(0.85)' }}>
+                      <button className="toggle" data-on={bSpring} onClick={() => { setBSpring(!bSpring); setBPreset(null) }} style={{ transform: 'scale(0.85)' }}>
                         <div className="toggle-knob" />
                       </button>
                     </div>
                     {bSpring && (
-                      <input type="range" className="slider" min={0.05} max={0.8} step={0.05} value={bBounce} onChange={(e) => setBBounce(Number(e.target.value))} />
+                      <input type="range" className="slider" min={0.05} max={0.8} step={0.05} value={bBounce} onChange={(e) => { setBBounce(Number(e.target.value)); setBPreset(null) }} />
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* Theme */}
+              <div className="builder-row">
+                <div className="builder-label">Theme</div>
+                <div className="type-pills">
+                  {(['light', 'dark'] as const).map((t) => (
+                    <button
+                      key={t}
+                      className="type-pill"
+                      data-type="position"
+                      data-active={bTheme === t}
+                      onClick={() => setBTheme(t)}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Show Progress */}
+              <div className="builder-row">
+                <div className="toggle-row">
+                  <span className="toggle-row-label">Show Progress</span>
+                  <button className="toggle" data-on={bShowProgress} onClick={() => setBShowProgress(!bShowProgress)}>
+                    <div className="toggle-knob" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Close on Escape */}
+              <div className="builder-row">
+                <div className="toggle-row">
+                  <span className="toggle-row-label">Close on Escape</span>
+                  <button className="toggle" data-on={bCloseOnEscape} onClick={() => setBCloseOnEscape(!bCloseOnEscape)}>
+                    <div className="toggle-knob" />
+                  </button>
                 </div>
               </div>
 
@@ -870,6 +1106,12 @@ goeyToast.success('Deployed', {
                     <tr><td>theme</td><td>'light' | 'dark'</td><td>'light'</td><td>Color theme</td></tr>
                     <tr><td>spring</td><td>boolean</td><td>true</td><td>Enable spring/bounce animations globally</td></tr>
                     <tr><td>bounce</td><td>number</td><td>0.4</td><td>Spring intensity: 0.05 (subtle) to 0.8 (dramatic)</td></tr>
+                    <tr><td>closeOnEscape</td><td>boolean</td><td>true</td><td>Dismiss most recent toast on Escape key press</td></tr>
+                    <tr><td>showProgress</td><td>boolean</td><td>false</td><td>Show countdown progress bar on all toasts</td></tr>
+                    <tr><td>maxQueue</td><td>number</td><td>Infinity</td><td>Maximum number of toasts in the waiting queue</td></tr>
+                    <tr><td>queueOverflow</td><td>'drop-oldest' | 'drop-newest'</td><td>'drop-oldest'</td><td>Behavior when queue exceeds maxQueue</td></tr>
+                    <tr><td>swipeToDismiss</td><td>boolean</td><td>true</td><td>Enable swipe-to-dismiss touch gestures on mobile</td></tr>
+                    <tr><td>preset</td><td>AnimationPresetName</td><td>—</td><td>Named animation preset (smooth, bouncy, subtle, snappy)</td></tr>
                   </tbody>
                 </table>
                 </div>
@@ -900,6 +1142,10 @@ goeyToast.success('Deployed', {
                     <tr><td>timing</td><td>GoeyToastTimings</td><td>Animation timing overrides</td></tr>
                     <tr><td>spring</td><td>boolean</td><td>Enable spring/bounce animations (default true)</td></tr>
                     <tr><td>bounce</td><td>number</td><td>Spring intensity: 0.05 (subtle) to 0.8 (dramatic), default 0.4</td></tr>
+                    <tr><td>showProgress</td><td>boolean</td><td>Show countdown progress bar on this toast</td></tr>
+                    <tr><td>preset</td><td>AnimationPresetName</td><td>Named animation preset (smooth, bouncy, subtle, snappy)</td></tr>
+                    <tr><td>onDismiss</td><td>(id: string | number) =&gt; void</td><td>Callback fired when toast is dismissed (any reason)</td></tr>
+                    <tr><td>onAutoClose</td><td>(id: string | number) =&gt; void</td><td>Callback fired only when toast auto-closes (timer)</td></tr>
                   </tbody>
                 </table>
                 </div>
@@ -909,6 +1155,56 @@ goeyToast.success('Deployed', {
             <div className="doc-section">
               <div className="doc-section-label">
                 <div className="doc-number">10</div>
+                <h3>Methods</h3>
+              </div>
+              <div className="doc-section-content">
+                <p>
+                  Beyond the basic <span className="inline-code">goeyToast()</span> and type methods,
+                  the following methods are available for managing toasts programmatically.
+                </p>
+                <div className="table-scroll">
+                <table className="prop-table">
+                  <thead>
+                    <tr><th>Method</th><th>Signature</th><th>Description</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td>goeyToast.dismiss</td><td>(id?: string | number) =&gt; void</td><td>Dismiss a specific toast by ID, or all toasts if no ID</td></tr>
+                    <tr><td>goeyToast.dismiss</td><td>(filter: DismissFilter) =&gt; void</td><td>Dismiss all toasts matching a type filter</td></tr>
+                    <tr><td>goeyToast.update</td><td>(id, options: GoeyToastUpdateOptions) =&gt; void</td><td>Update an active toast's title, description, type, or action in place</td></tr>
+                  </tbody>
+                </table>
+                </div>
+                <h4 style={{ marginTop: 20, fontSize: 13 }}>DismissFilter</h4>
+                <pre><code>{`interface DismissFilter {
+  type: GoeyToastType | GoeyToastType[]
+}
+
+// Dismiss all error toasts
+goeyToast.dismiss({ type: 'error' })
+
+// Dismiss all error and warning toasts
+goeyToast.dismiss({ type: ['error', 'warning'] })`}</code></pre>
+                <h4 style={{ marginTop: 20, fontSize: 13 }}>GoeyToastUpdateOptions</h4>
+                <pre><code>{`interface GoeyToastUpdateOptions {
+  title?: string
+  description?: ReactNode
+  type?: GoeyToastType
+  action?: GoeyToastAction
+}
+
+// Update a toast in place
+const id = goeyToast.success('Uploading...')
+goeyToast.update(id, {
+  title: 'Upload complete!',
+  type: 'success',
+  description: 'File has been processed.',
+})`}</code></pre>
+              </div>
+            </div>
+
+            <div className="doc-section">
+              <div className="doc-section-label">
+                <div className="doc-number">11</div>
                 <h3>Custom Styling</h3>
               </div>
               <div className="doc-section-content">
@@ -951,7 +1247,7 @@ goeyToast.success('Deployed', {
             </div>
             <div className="doc-section">
               <div className="doc-section-label">
-                <div className="doc-number">11</div>
+                <div className="doc-number">12</div>
                 <h3>Spring Animation</h3>
               </div>
               <div className="doc-section-content">

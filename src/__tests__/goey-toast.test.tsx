@@ -27,7 +27,7 @@ import { toast } from 'sonner'
 import { SuccessIcon, ErrorIcon, WarningIcon, InfoIcon, SpinnerIcon } from '../icons'
 import { GoeyToast } from '../components/GoeyToast'
 import { GoeyToaster } from '../components/GoeyToaster'
-import { goeyToast } from '../goey-toast'
+import { goeyToast, _resetQueue } from '../goey-toast'
 
 describe('Icon components', () => {
   it('SuccessIcon renders an SVG with correct size and stroke', () => {
@@ -182,12 +182,19 @@ describe('goeyToast API', () => {
   it('has dismiss method as a function', () => {
     expect(typeof goeyToast.dismiss).toBe('function')
   })
+
+  it('has update method as a function', () => {
+    expect(typeof goeyToast.update).toBe('function')
+  })
 })
 
 describe('goeyToast.promise', () => {
   const mockCustom = toast.custom as ReturnType<typeof vi.fn>
 
-  beforeEach(() => { mockCustom.mockClear() })
+  beforeEach(() => {
+    mockCustom.mockClear()
+    _resetQueue()
+  })
 
   function renderPromiseToast<T>(promise: Promise<T>, data: Parameters<typeof goeyToast.promise<T>>[1]) {
     goeyToast.promise(promise, data)
@@ -460,5 +467,92 @@ describe('goeyToast.promise', () => {
     await act(async () => { reject!(new Error('fail')) })
 
     expect(mockCustom).toHaveBeenCalled()
+  })
+})
+
+describe('goeyToast.update', () => {
+  const mockCustom = toast.custom as ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    mockCustom.mockClear()
+    _resetQueue()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  function createAndRenderToast(title: string, options?: Parameters<typeof goeyToast>[1]) {
+    const id = goeyToast(title, options)
+    const renderFn = mockCustom.mock.calls[0][0]
+    return { id, ...render(renderFn()) }
+  }
+
+  it('updates the title of an active toast', () => {
+    const { id } = createAndRenderToast('Original title')
+    expect(screen.getByText('Original title')).toBeInTheDocument()
+
+    act(() => { goeyToast.update(id, { title: 'Updated title' }) })
+
+    expect(screen.getByText('Updated title')).toBeInTheDocument()
+  })
+
+  it('updates the description of an active toast', () => {
+    const { id } = createAndRenderToast('Title', { description: 'Original description' })
+    act(() => { vi.advanceTimersByTime(400) })
+    expect(screen.getByText('Original description')).toBeInTheDocument()
+
+    act(() => { goeyToast.update(id, { description: 'Updated description' }) })
+
+    expect(screen.getByText('Updated description')).toBeInTheDocument()
+  })
+
+  it('updates the type of an active toast', () => {
+    const { id } = createAndRenderToast('Notification')
+    // Default type renders with role="status"
+    expect(screen.getByRole('status')).toBeInTheDocument()
+
+    act(() => { goeyToast.update(id, { type: 'error' }) })
+
+    // Error type renders with role="alert"
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+
+  it('updates the action of an active toast', () => {
+    const onClick = vi.fn()
+    const { id } = createAndRenderToast('Title', { action: { label: 'Original', onClick } })
+    act(() => { vi.advanceTimersByTime(400) })
+    expect(screen.getByRole('button', { name: 'Original' })).toBeInTheDocument()
+
+    const newOnClick = vi.fn()
+    act(() => { goeyToast.update(id, { action: { label: 'Updated', onClick: newOnClick } }) })
+
+    expect(screen.getByRole('button', { name: 'Updated' })).toBeInTheDocument()
+  })
+
+  it('does nothing for a non-existent toast ID', () => {
+    createAndRenderToast('Title')
+    // Should not throw
+    expect(() => {
+      goeyToast.update('nonexistent-id', { title: 'New title' })
+    }).not.toThrow()
+    expect(screen.getByText('Title')).toBeInTheDocument()
+  })
+
+  it('updates multiple fields at once', () => {
+    const onClick = vi.fn()
+    const { id } = createAndRenderToast('Old title')
+    expect(screen.getByText('Old title')).toBeInTheDocument()
+
+    act(() => {
+      goeyToast.update(id, {
+        title: 'New title',
+        description: 'New description',
+        type: 'success',
+      })
+    })
+
+    expect(screen.getByText('New title')).toBeInTheDocument()
   })
 })

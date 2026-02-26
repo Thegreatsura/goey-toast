@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { GoeyToast } from '../components/GoeyToast'
+import { setGoeyTheme, setGoeyDir, setGoeyPosition } from '../context'
 
 // Helper to mock matchMedia for reduced motion tests
 function mockReducedMotion(enabled: boolean) {
@@ -17,6 +18,7 @@ describe('GoeyToast', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.unstubAllGlobals()
+    setGoeyTheme('light')
   })
 
   it('renders title text', () => {
@@ -218,6 +220,63 @@ describe('GoeyToast', () => {
     expect(path.getAttribute('fill')).toBe('#ffffff')
   })
 
+  describe('ARIA accessibility', () => {
+    it('sets role="status" and aria-live="polite" for success toasts', () => {
+      const { container } = render(
+        <GoeyToast title="Done!" type="success" phase="success" />
+      )
+      const wrapper = container.firstChild as HTMLElement
+      expect(wrapper.getAttribute('role')).toBe('status')
+      expect(wrapper.getAttribute('aria-live')).toBe('polite')
+      expect(wrapper.getAttribute('aria-atomic')).toBe('true')
+    })
+
+    it('sets role="status" and aria-live="polite" for info toasts', () => {
+      const { container } = render(
+        <GoeyToast title="Info" type="info" phase="info" />
+      )
+      const wrapper = container.firstChild as HTMLElement
+      expect(wrapper.getAttribute('role')).toBe('status')
+      expect(wrapper.getAttribute('aria-live')).toBe('polite')
+    })
+
+    it('sets role="status" and aria-live="polite" for default toasts', () => {
+      const { container } = render(
+        <GoeyToast title="Hello" type="default" phase="default" />
+      )
+      const wrapper = container.firstChild as HTMLElement
+      expect(wrapper.getAttribute('role')).toBe('status')
+      expect(wrapper.getAttribute('aria-live')).toBe('polite')
+    })
+
+    it('sets role="alert" and aria-live="assertive" for error toasts', () => {
+      const { container } = render(
+        <GoeyToast title="Error!" type="error" phase="error" />
+      )
+      const wrapper = container.firstChild as HTMLElement
+      expect(wrapper.getAttribute('role')).toBe('alert')
+      expect(wrapper.getAttribute('aria-live')).toBe('assertive')
+      expect(wrapper.getAttribute('aria-atomic')).toBe('true')
+    })
+
+    it('sets role="alert" and aria-live="assertive" for warning toasts', () => {
+      const { container } = render(
+        <GoeyToast title="Warning!" type="warning" phase="warning" />
+      )
+      const wrapper = container.firstChild as HTMLElement
+      expect(wrapper.getAttribute('role')).toBe('alert')
+      expect(wrapper.getAttribute('aria-live')).toBe('assertive')
+    })
+
+    it('hides SVG blob from screen readers with aria-hidden', () => {
+      const { container } = render(
+        <GoeyToast title="Done!" type="success" phase="success" />
+      )
+      const svg = container.querySelector('svg')
+      expect(svg?.getAttribute('aria-hidden')).toBe('true')
+    })
+  })
+
   describe('prefers-reduced-motion', () => {
     it('expands immediately with no delay when reduced motion is preferred', () => {
       mockReducedMotion(true)
@@ -277,6 +336,90 @@ describe('GoeyToast', () => {
       )
       const contentEl = container.querySelector('[class*="content"]') as HTMLElement
       expect(contentEl.className).toContain('Compact')
+    })
+  })
+
+  describe('dark mode', () => {
+    it('uses dark fillColor (#1a1a1a) when theme is dark and no custom fillColor', () => {
+      setGoeyTheme('dark')
+      const { container } = render(
+        <GoeyToast title="Dark" type="info" phase="info" />
+      )
+      const path = container.querySelector('svg path')!
+      expect(path.getAttribute('fill')).toBe('#1a1a1a')
+    })
+
+    it('uses light fillColor (#ffffff) when theme is light and no custom fillColor', () => {
+      setGoeyTheme('light')
+      const { container } = render(
+        <GoeyToast title="Light" type="info" phase="info" />
+      )
+      const path = container.querySelector('svg path')!
+      expect(path.getAttribute('fill')).toBe('#ffffff')
+    })
+
+    it('respects explicit fillColor even in dark mode', () => {
+      setGoeyTheme('dark')
+      const { container } = render(
+        <GoeyToast title="Custom" type="info" phase="info" fillColor="#ff0000" />
+      )
+      const path = container.querySelector('svg path')!
+      expect(path.getAttribute('fill')).toBe('#ff0000')
+    })
+  })
+
+  describe('RTL layout support', () => {
+    afterEach(() => {
+      setGoeyDir('ltr')
+      setGoeyPosition('bottom-right')
+    })
+
+    it('flips right-position to left-side visual in RTL mode', () => {
+      setGoeyPosition('bottom-right')
+      setGoeyDir('rtl')
+      const { container } = render(
+        <GoeyToast title="RTL Right" type="info" phase="info" />
+      )
+      const wrapper = container.firstChild as HTMLElement
+      // In RTL with bottom-right position, the toast should NOT have marginLeft:auto/scaleX(-1)
+      // because it visually behaves as a left-side toast
+      expect(wrapper.style.marginLeft).not.toBe('auto')
+      expect(wrapper.style.transform).not.toContain('scaleX(-1)')
+    })
+
+    it('flips left-position to right-side visual in RTL mode', () => {
+      setGoeyPosition('bottom-left')
+      setGoeyDir('rtl')
+      const { container } = render(
+        <GoeyToast title="RTL Left" type="info" phase="info" />
+      )
+      const wrapper = container.firstChild as HTMLElement
+      // In RTL with bottom-left position, the toast should have right-side styles
+      expect(wrapper.style.marginLeft).toBe('auto')
+      expect(wrapper.style.transform).toContain('scaleX(-1)')
+    })
+
+    it('keeps center position unchanged in RTL mode', () => {
+      setGoeyPosition('bottom-center')
+      setGoeyDir('rtl')
+      const { container } = render(
+        <GoeyToast title="RTL Center" type="info" phase="info" />
+      )
+      const wrapper = container.firstChild as HTMLElement
+      // Center position should remain centered in RTL
+      expect(wrapper.style.margin).toBe('0px auto')
+    })
+
+    it('does not flip positions in LTR mode', () => {
+      setGoeyPosition('bottom-right')
+      setGoeyDir('ltr')
+      const { container } = render(
+        <GoeyToast title="LTR Right" type="info" phase="info" />
+      )
+      const wrapper = container.firstChild as HTMLElement
+      // In LTR with bottom-right position, the toast should have right-side styles
+      expect(wrapper.style.marginLeft).toBe('auto')
+      expect(wrapper.style.transform).toContain('scaleX(-1)')
     })
   })
 })

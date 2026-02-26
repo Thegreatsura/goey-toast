@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { GoeyToast } from './components/GoeyToast'
 import { ToastErrorBoundary } from './components/ToastErrorBoundary'
-import { getGoeyVisibleToasts } from './context'
+import { getGoeyVisibleToasts, getGoeyMaxQueue, getGoeyQueueOverflow, announce, type AriaLivePoliteness } from './context'
 import type {
   GoeyToastOptions,
   GoeyPromiseData,
@@ -11,53 +11,151 @@ import type {
   GoeyToastAction,
   GoeyToastClassNames,
   GoeyToastTimings,
+  GoeyToastUpdateOptions,
+  DismissFilter,
 } from './types'
+import type { AnimationPresetName } from './presets'
 
 const DEFAULT_EXPANDED_DURATION = 4000
+
+function getAnnouncePoliteness(type: GoeyToastType): AriaLivePoliteness {
+  return type === 'error' || type === 'warning' ? 'assertive' : 'polite'
+}
+
+function buildAnnouncementMessage(title: string, description?: ReactNode): string {
+  if (!description || typeof description !== 'string') return title
+  return `${title}: ${description}`
+}
 
 // ---------------------------------------------------------------------------
 // Toast queue — limits concurrent toasts to `visibleToasts` (default 3).
 // Excess toasts wait in a FIFO queue and fire when a slot opens.
 // ---------------------------------------------------------------------------
-const _activeIds = new Set<string | number>()
-const _queue: Array<{ id: string | number; create: () => void }> = []
+const _activeIds = new Map<string | number, GoeyToastType>()
+const _queue: Array<{ id: string | number; type: GoeyToastType; create: () => void }> = []
+
+// ---------------------------------------------------------------------------
+// Callback registry — stores onDismiss/onAutoClose per toast ID so they can
+// be invoked when the toast unmounts. The _autoCloseFlags set tracks toasts
+// whose dismiss was triggered by the auto-close timer (not manual action).
+// ---------------------------------------------------------------------------
+const _toastCallbacks = new Map<string | number, {
+  onDismiss?: (id: string | number) => void
+  onAutoClose?: (id: string | number) => void
+}>()
+const _autoCloseFlags = new Set<string | number>()
+const _manualDismissFlags = new Set<string | number>()
+
+/** @internal Mark a toast as being auto-closed (timer-based dismiss). */
+export function _markAutoClose(id: string | number) {
+  _autoCloseFlags.add(id)
+}
 
 /** @internal Reset queue state — exported for tests only. */
 export function _resetQueue() {
   _activeIds.clear()
   _queue.length = 0
+  _toastUpdateListeners.clear()
+  _toastCallbacks.clear()
+  _autoCloseFlags.clear()
+  _manualDismissFlags.clear()
+}
+
+/** @internal Get the most recently created active toast ID — used by Escape key handler. */
+export function _getMostRecentActiveId(): string | number | undefined {
+  let last: string | number | undefined
+  for (const id of _activeIds.keys()) last = id
+  return last
 }
 
 function _processQueue() {
   const max = getGoeyVisibleToasts()
   while (_queue.length > 0 && _activeIds.size < max) {
     const next = _queue.shift()!
-    _activeIds.add(next.id)
+    _activeIds.set(next.id, next.type)
     next.create()
   }
 }
 
+function _enqueue(entry: { id: string | number; type: GoeyToastType; create: () => void }): boolean {
+  const maxQueue = getGoeyMaxQueue()
+  const overflow = getGoeyQueueOverflow()
+  if (_queue.length >= maxQueue) {
+    if (overflow === 'drop-newest') return false
+    // drop-oldest: remove the oldest queued item
+    _queue.shift()
+  }
+  _queue.push(entry)
+  return true
+}
+
 function _onToastDismissed(id: string | number) {
   if (!_activeIds.delete(id)) return
+  _toastUpdateListeners.delete(id)
+
+  // Invoke callbacks — auto-close is true if explicitly flagged OR if not manually dismissed
+  const cbs = _toastCallbacks.get(id)
+  if (cbs) {
+    const isAutoClose = _autoCloseFlags.has(id) || !_manualDismissFlags.has(id)
+    if (isAutoClose && cbs.onAutoClose) {
+      try { cbs.onAutoClose(id) } catch { /* callback errors must not break queue */ }
+    }
+    if (cbs.onDismiss) {
+      try { cbs.onDismiss(id) } catch { /* callback errors must not break queue */ }
+    }
+    _toastCallbacks.delete(id)
+  }
+  _autoCloseFlags.delete(id)
+  _manualDismissFlags.delete(id)
+
   _processQueue()
+}
+
+// ---------------------------------------------------------------------------
+// Toast update store — allows in-place updates to active toasts.
+// Each toast wrapper subscribes to its own ID; calling update() stores
+// partial new props and notifies the listener to re-render.
+// ---------------------------------------------------------------------------
+const _toastUpdateListeners = new Map<string | number, (opts: GoeyToastUpdateOptions) => void>()
+
+function updateGoeyToast(id: string | number, options: GoeyToastUpdateOptions) {
+  const listener = _toastUpdateListeners.get(id)
+  if (listener) {
+    listener(options)
+    // Update the type in _activeIds if the type changed
+    if (options.type !== undefined && _activeIds.has(id)) {
+      _activeIds.set(id, options.type)
+    }
+    // Announce updated content to screen readers
+    if (options.title !== undefined) {
+      announce(
+        buildAnnouncementMessage(options.title, options.description),
+        options.type ? getAnnouncePoliteness(options.type) : 'polite',
+      )
+    }
+  }
 }
 
 function GoeyToastWrapper({
   initialPhase,
-  title,
-  type,
-  description,
-  action,
+  title: initialTitle,
+  type: initialType,
+  description: initialDescription,
+  action: initialAction,
   icon,
   classNames,
   fillColor,
   borderColor,
   borderWidth,
   timing,
+  preset,
   spring,
   bounce,
+  showProgress,
   toastId,
   activeId,
+  onDismiss,
+  onAutoClose,
 }: {
   initialPhase: GoeyToastPhase
   title: string
@@ -70,11 +168,47 @@ function GoeyToastWrapper({
   borderColor?: string
   borderWidth?: number
   timing?: GoeyToastTimings
+  preset?: AnimationPresetName
   spring?: boolean
   bounce?: number
+  showProgress?: boolean
   toastId?: string | number
   activeId: string | number
+  onDismiss?: (id: string | number) => void
+  onAutoClose?: (id: string | number) => void
 }) {
+  // Register callbacks so _onToastDismissed can invoke them on unmount
+  useEffect(() => {
+    if (onDismiss || onAutoClose) {
+      _toastCallbacks.set(activeId, { onDismiss, onAutoClose })
+    }
+  }, [activeId, onDismiss, onAutoClose])
+
+  const [title, setTitle] = useState(initialTitle)
+  const [type, setType] = useState(initialType)
+  const [phase, setPhase] = useState<GoeyToastPhase>(initialPhase)
+  const [description, setDescription] = useState(initialDescription)
+  const [action, setAction] = useState(initialAction)
+  const [currentIcon, setCurrentIcon] = useState<ReactNode | undefined>(icon)
+
+  // Subscribe to in-place updates for this toast's ID.
+  useEffect(() => {
+    const handleUpdate = (opts: GoeyToastUpdateOptions) => {
+      if (opts.title !== undefined) setTitle(opts.title)
+      if (opts.description !== undefined) setDescription(opts.description)
+      if (opts.type !== undefined) {
+        setType(opts.type)
+        setPhase(opts.type)
+      }
+      if (opts.action !== undefined) setAction(opts.action)
+      if ('icon' in opts) setCurrentIcon(opts.icon ?? undefined)
+    }
+    _toastUpdateListeners.set(activeId, handleUpdate)
+    return () => {
+      _toastUpdateListeners.delete(activeId)
+    }
+  }, [activeId])
+
   // Guarantee the queue slot is freed when this toast unmounts from Sonner's DOM.
   // Uses a mounted ref + delayed check to survive React StrictMode's dev-only
   // double-mount cycle (mount → unmount → remount) without prematurely freeing the slot.
@@ -96,15 +230,17 @@ function GoeyToastWrapper({
         description={description}
         type={type}
         action={action}
-        icon={icon}
-        phase={initialPhase}
+        icon={currentIcon}
+        phase={phase}
         classNames={classNames}
         fillColor={fillColor}
         borderColor={borderColor}
         borderWidth={borderWidth}
         timing={timing}
+        preset={preset}
         spring={spring}
         bounce={bounce}
+        showProgress={showProgress}
         toastId={toastId}
       />
     </ToastErrorBoundary>
@@ -124,6 +260,13 @@ function PromiseToastWrapper<T>({
   const [title, setTitle] = useState(data.loading)
   const [description, setDescription] = useState<ReactNode | undefined>(data.description?.loading)
   const [action, setAction] = useState<GoeyToastAction | undefined>(undefined)
+
+  // Register callbacks so _onToastDismissed can invoke them on unmount
+  useEffect(() => {
+    if (data.onDismiss || data.onAutoClose) {
+      _toastCallbacks.set(toastId, { onDismiss: data.onDismiss, onAutoClose: data.onAutoClose })
+    }
+  }, [toastId, data.onDismiss, data.onAutoClose])
 
   // Guarantee the queue slot is freed when this toast unmounts from Sonner's DOM.
   const mountedRef = useRef(true)
@@ -154,27 +297,27 @@ function PromiseToastWrapper<T>({
         const desc = typeof data.description?.success === 'function'
           ? data.description.success(result)
           : data.description?.success
-        setTitle(
-          typeof data.success === 'function'
-            ? data.success(result)
-            : data.success
-        )
+        const resolvedTitle = typeof data.success === 'function'
+          ? data.success(result)
+          : data.success
+        setTitle(resolvedTitle)
         setDescription(desc)
         setAction(data.action?.success)
         setPhase('success')
         resetDuration(Boolean(desc || data.action?.success))
+        announce(buildAnnouncementMessage(resolvedTitle, desc), 'polite')
       })
       .catch((err) => {
         const desc = typeof data.description?.error === 'function'
           ? data.description.error(err)
           : data.description?.error
-        setTitle(
-          typeof data.error === 'function' ? data.error(err) : data.error
-        )
+        const resolvedTitle = typeof data.error === 'function' ? data.error(err) : data.error
+        setTitle(resolvedTitle)
         setDescription(desc)
         setAction(data.action?.error)
         setPhase('error')
         resetDuration(Boolean(desc || data.action?.error))
+        announce(buildAnnouncementMessage(resolvedTitle, desc), 'assertive')
       })
   }, [])
 
@@ -191,6 +334,7 @@ function PromiseToastWrapper<T>({
         borderColor={data.borderColor}
         borderWidth={data.borderWidth}
         timing={data.timing}
+        preset={data.preset}
         spring={data.spring}
         bounce={data.bounce}
       />
@@ -226,10 +370,14 @@ function createGoeyToast(
           borderColor={options?.borderColor}
           borderWidth={options?.borderWidth}
           timing={options?.timing}
+          preset={options?.preset}
           spring={options?.spring}
           bounce={options?.bounce}
+          showProgress={options?.showProgress}
           toastId={hasExpandedContent ? toastId : undefined}
           activeId={toastId}
+          onDismiss={options?.onDismiss}
+          onAutoClose={options?.onAutoClose}
         />
       ),
       {
@@ -239,28 +387,63 @@ function createGoeyToast(
     )
   }
 
+  // Register callbacks before creating the toast so they're available on unmount
+  if (options?.onDismiss || options?.onAutoClose) {
+    _toastCallbacks.set(toastId, { onDismiss: options.onDismiss, onAutoClose: options.onAutoClose })
+  }
+
+  // Announce to screen readers via the persistent ARIA live region
+  announce(
+    buildAnnouncementMessage(title, options?.description),
+    getAnnouncePoliteness(type),
+  )
+
   if (_activeIds.size < getGoeyVisibleToasts()) {
-    _activeIds.add(toastId)
+    _activeIds.set(toastId, type)
     create()
   } else {
-    _queue.push({ id: toastId, create })
+    _enqueue({ id: toastId, type, create })
   }
 
   return toastId
 }
 
-function dismissGoeyToast(id?: string | number) {
-  if (id != null) {
-    // Remove from queue if queued
-    const idx = _queue.findIndex(q => q.id === id)
+function dismissGoeyToast(idOrFilter?: string | number | DismissFilter) {
+  if (idOrFilter != null && typeof idOrFilter === 'object') {
+    // Dismiss by type filter
+    const filterTypes = Array.isArray(idOrFilter.type) ? idOrFilter.type : [idOrFilter.type]
+    const typesSet = new Set<GoeyToastType>(filterTypes)
+
+    // Remove matching toasts from the queue
+    for (let i = _queue.length - 1; i >= 0; i--) {
+      if (typesSet.has(_queue[i].type)) {
+        _queue.splice(i, 1)
+      }
+    }
+
+    // Dismiss matching active toasts via Sonner
+    for (const [id, toastType] of _activeIds) {
+      if (typesSet.has(toastType)) {
+        _manualDismissFlags.add(id)
+        toast.dismiss(id)
+      }
+    }
+  } else if (idOrFilter != null) {
+    // Dismiss by specific ID
+    const idx = _queue.findIndex(q => q.id === idOrFilter)
     if (idx !== -1) {
       _queue.splice(idx, 1)
       return
     }
+    // Mark as manual dismiss so onAutoClose is NOT called
+    _manualDismissFlags.add(idOrFilter)
     // Dismiss from Sonner — unmount cleanup in GoeyToastWrapper handles activeIds + queue
-    toast.dismiss(id)
+    toast.dismiss(idOrFilter)
   } else {
-    // Dismiss all: clear queue and dismiss all active toasts
+    // Dismiss all: mark all active as manual dismiss, clear queue and dismiss
+    for (const id of _activeIds.keys()) {
+      _manualDismissFlags.add(id)
+    }
     _queue.length = 0
     _activeIds.clear()
     toast.dismiss()
@@ -282,6 +465,14 @@ export const goeyToast = Object.assign(
     promise: <T,>(promise: Promise<T>, data: GoeyPromiseData<T>) => {
       const id = Math.random().toString(36).slice(2)
 
+      // Announce loading state to screen readers
+      announce(buildAnnouncementMessage(data.loading, data.description?.loading), 'polite')
+
+      // Register callbacks before creating the toast
+      if (data.onDismiss || data.onAutoClose) {
+        _toastCallbacks.set(id, { onDismiss: data.onDismiss, onAutoClose: data.onAutoClose })
+      }
+
       const create = () => {
         toast.custom(() => (
           <PromiseToastWrapper promise={promise} data={data} toastId={id} />
@@ -292,14 +483,15 @@ export const goeyToast = Object.assign(
       }
 
       if (_activeIds.size < getGoeyVisibleToasts()) {
-        _activeIds.add(id)
+        _activeIds.set(id, 'info')
         create()
       } else {
-        _queue.push({ id, create })
+        _enqueue({ id, type: 'info', create })
       }
 
       return id
     },
     dismiss: dismissGoeyToast,
+    update: updateGoeyToast,
   }
 )

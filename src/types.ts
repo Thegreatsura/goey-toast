@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { ExternalToast, ToasterProps } from 'sonner'
+import type { AnimationPresetName } from './presets'
 
 export type GoeyToastType = 'default' | 'success' | 'error' | 'warning' | 'info'
 
@@ -35,6 +36,7 @@ export interface GoeyToastData {
   fillColor?: string
   borderColor?: string
   borderWidth?: number
+  preset?: AnimationPresetName
   spring?: boolean
   bounce?: number
 }
@@ -50,8 +52,12 @@ export interface GoeyToastOptions {
   borderColor?: string
   borderWidth?: number
   timing?: GoeyToastTimings
+  preset?: AnimationPresetName
   spring?: boolean
   bounce?: number
+  showProgress?: boolean
+  onDismiss?: (id: string | number) => void
+  onAutoClose?: (id: string | number) => void
 }
 
 export interface GoeyPromiseData<T> {
@@ -72,11 +78,26 @@ export interface GoeyPromiseData<T> {
   borderColor?: string
   borderWidth?: number
   timing?: GoeyToastTimings
+  preset?: AnimationPresetName
   spring?: boolean
   bounce?: number
+  onDismiss?: (id: string | number) => void
+  onAutoClose?: (id: string | number) => void
 }
 
 export type GoeyToastPhase = 'loading' | 'default' | 'success' | 'error' | 'warning' | 'info'
+
+export interface GoeyToastUpdateOptions {
+  title?: string
+  description?: ReactNode
+  type?: GoeyToastType
+  action?: GoeyToastAction
+  icon?: ReactNode | null
+}
+
+export interface DismissFilter {
+  type: GoeyToastType | GoeyToastType[]
+}
 
 export interface GoeyToasterProps {
   position?: ToasterProps['position']
@@ -90,6 +111,12 @@ export interface GoeyToasterProps {
   richColors?: boolean
   visibleToasts?: number
   dir?: 'ltr' | 'rtl'
+  preset?: AnimationPresetName
   spring?: boolean
   bounce?: number
+  swipeToDismiss?: boolean
+  closeOnEscape?: boolean
+  maxQueue?: number
+  queueOverflow?: 'drop-oldest' | 'drop-newest'
+  showProgress?: boolean
 }

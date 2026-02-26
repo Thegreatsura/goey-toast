@@ -1,6 +1,6 @@
 {
   "name": "goey-toast",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A gooey, morphing toast component built on Sonner with Framer Motion animations",
   "type": "module",
   "main": "./dist/index.cjs",

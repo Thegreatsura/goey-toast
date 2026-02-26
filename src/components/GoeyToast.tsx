@@ -1,11 +1,18 @@
-import { useRef, useState, useEffect, useLayoutEffect, useCallback, type FC, type ReactNode } from 'react'
+import { useRef, useState, useEffect, useLayoutEffect as useLayoutEffectOrig, useCallback, useMemo, type FC, type ReactNode } from 'react'
 import { motion, AnimatePresence, animate } from 'framer-motion'
 import { toast as sonnerToast } from 'sonner'
 import type { GoeyToastAction, GoeyToastClassNames, GoeyToastPhase, GoeyToastTimings, GoeyToastType } from '../types'
-import { getGoeyPosition, getGoeySpring, getGoeyBounce, subscribeContainerHovered, getContainerHovered } from '../context'
+import type { AnimationPresetName } from '../presets'
+import { animationPresets } from '../presets'
+import { getGoeyPosition, getGoeyDir, getGoeySpring, getGoeyBounce, getGoeySwipeToDismiss, getGoeyTheme, getGoeyShowProgress, subscribeContainerHovered, getContainerHovered } from '../context'
 import { DefaultIcon, SuccessIcon, ErrorIcon, WarningIcon, InfoIcon, SpinnerIcon } from '../icons'
 import { usePrefersReducedMotion } from '../usePrefersReducedMotion'
 import { styles } from './goey-styles'
+
+// SSR-safe useLayoutEffect: avoids React warning when rendering on the server.
+// Falls back to useEffect during SSR (no DOM to measure anyway).
+const useIsomorphicLayoutEffect =
+  typeof window !== 'undefined' ? useLayoutEffectOrig : useEffect
 
 export interface GoeyToastProps {
   title: string
@@ -19,8 +26,10 @@ export interface GoeyToastProps {
   borderColor?: string
   borderWidth?: number
   timing?: GoeyToastTimings
+  preset?: AnimationPresetName
   spring?: boolean
   bounce?: number
+  showProgress?: boolean
   toastId?: string | number
 }
 
@@ -48,6 +57,15 @@ const actionColorMap: Record<GoeyToastPhase, string> = {
   error: styles.actionError,
   warning: styles.actionWarning,
   info: styles.actionInfo,
+}
+
+const progressColorMap: Record<GoeyToastPhase, string> = {
+  loading: styles.progressInfo,
+  default: styles.progressDefault,
+  success: styles.progressSuccess,
+  error: styles.progressError,
+  warning: styles.progressWarning,
+  info: styles.progressInfo,
 }
 
 const PH = 34 // pill height constant
@@ -195,10 +213,28 @@ function syncSonnerHeights(
 }
 
 /**
+ * Simple last-result cache for pure functions called every animation frame.
+ * Avoids recomputing the SVG path string when flush() is called multiple
+ * times with identical parameters (e.g. syncSonnerHeights after morph update).
+ */
+function memoizePath(fn: (pw: number, bw: number, th: number, t: number) => string) {
+  let lastArgs: [number, number, number, number] | null = null
+  let lastResult = ''
+  return (pw: number, bw: number, th: number, t: number): string => {
+    if (lastArgs && lastArgs[0] === pw && lastArgs[1] === bw && lastArgs[2] === th && lastArgs[3] === t) {
+      return lastResult
+    }
+    lastResult = fn(pw, bw, th, t)
+    lastArgs = [pw, bw, th, t]
+    return lastResult
+  }
+}
+
+/**
  * Parametric morph path: pill lobe stays constant, body grows from underneath.
  * t=0 → pure pill, t=1 → full organic blob.
  */
-function morphPath(pw: number, bw: number, th: number, t: number): string {
+function morphPathRaw(pw: number, bw: number, th: number, t: number): string {
   const pr = PH / 2
   const pillW = Math.min(pw, bw)
 
@@ -245,7 +281,7 @@ function morphPath(pw: number, bw: number, th: number, t: number): string {
  * Centered morph path: pill centered on top, body grows symmetrically below.
  * t=0 → pure pill (centered), t=1 → full blob with pill centered on top.
  */
-function morphPathCenter(pw: number, bw: number, th: number, t: number): string {
+function morphPathCenterRaw(pw: number, bw: number, th: number, t: number): string {
   const pr = PH / 2
   const pillW = Math.min(pw, bw)
 
@@ -319,6 +355,9 @@ function morphPathCenter(pw: number, bw: number, th: number, t: number): string 
   ].join(' ')
 }
 
+const morphPath = memoizePath(morphPathRaw)
+const morphPathCenter = memoizePath(morphPathCenterRaw)
+
 // Smooth easing curve for non-spring animations
 const SMOOTH_EASE = [0.4, 0, 0.2, 1] as const
 
@@ -329,25 +368,36 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   icon,
   phase,
   classNames,
-  fillColor = '#ffffff',
+  fillColor: fillColorProp,
   borderColor,
   borderWidth,
   timing,
+  preset,
   spring: springProp,
   bounce: bounceProp,
+  showProgress: showProgressProp,
   toastId,
 }) => {
+  const theme = getGoeyTheme()
+  const fillColor = fillColorProp ?? (theme === 'dark' ? '#1a1a1a' : '#ffffff')
   const position = getGoeyPosition()
-  const isRight = position?.includes('right') ?? false
+  const dir = getGoeyDir()
+  const posIsRight = position?.includes('right') ?? false
   const isCenter = position?.includes('center') ?? false
+  // In RTL, left-positioned toasts visually behave like right-positioned ones and vice versa
+  const isRight = dir === 'rtl' ? (isCenter ? false : !posIsRight) : posIsRight
   const prefersReducedMotion = usePrefersReducedMotion()
-  // Per-toast spring overrides global, default to true
-  const useSpring = springProp ?? getGoeySpring()
-  const bounceVal = bounceProp ?? getGoeyBounce() ?? 0.4
+  // Explicit props > per-toast preset > global context values > defaults
+  const presetConfig = preset ? animationPresets[preset] : undefined
+  const useSpring = springProp ?? presetConfig?.spring ?? getGoeySpring()
+  const bounceVal = bounceProp ?? presetConfig?.bounce ?? getGoeyBounce() ?? 0.4
+  const showProgress = showProgressProp ?? getGoeyShowProgress()
 
   // Action success override state
   const [actionSuccess, setActionSuccess] = useState<string | null>(null)
   const [dismissing, setDismissing] = useState(false)
+  // Counter to remount progress bar on re-expand, restarting the CSS animation
+  const [progressKey, setProgressKey] = useState(0)
   const [hovered, setHovered] = useState(false)
   const hoveredRef = useRef(false)
   // Container-level hover (hovering anywhere in the Sonner stack, not just this toast)
@@ -411,10 +461,13 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     // Clamp t to [0,1] — spring overshoot past 1 or below 0 must not
     // cause flush to toggle between constraint branches (jitter).
     const t = Math.max(0, Math.min(1, morphTRef.current))
-    // Read position fresh each call so flush never uses a stale value
+    // Read position and dir fresh each call so flush never uses a stale value
     const pos = getGoeyPosition()
-    const rightSide = pos?.includes('right') ?? false
+    const d = getGoeyDir()
     const centerPos = pos?.includes('center') ?? false
+    const posRight = pos?.includes('right') ?? false
+    // In RTL, flip left/right visual behavior (center stays the same)
+    const rightSide = d === 'rtl' ? (centerPos ? false : !posRight) : posRight
     // Center positions: always use morphPathCenter so pill stays at fixed center offset
     // (switching to morphPath at t=0 causes a frame where content jumps left)
     if (centerPos) {
@@ -516,7 +569,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   }, [])
 
   // Measure on prop changes (useLayoutEffect prevents flash of unconstrained content)
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     measure()
     const t = setTimeout(measure, 100)
     return () => clearTimeout(t)
@@ -554,8 +607,8 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     // Softer squish on collapse — blob is wider so same % looks more drastic
     // Scale squish intensity with bounce (0.05=subtle, 0.8=dramatic)
     const bScale = bounceVal / 0.4
-    const compressY = (phase === 'collapse' ? 0.07 : 0.12) * bScale
-    const expandX = (phase === 'collapse' ? 0.035 : 0.06) * bScale
+    const compressY = (phase === 'collapse' ? 0.035 : 0.12) * bScale
+    const expandX = (phase === 'collapse' ? 0.018 : 0.06) * bScale
     blobSquishCtrl.current = animate(0, 1, {
       ...springConfig,
       onUpdate: (v) => {
@@ -576,7 +629,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   }, [prefersReducedMotion, expandDur, collapseDur, useSpring, bounceVal])
 
   // Handle dims changes: pill resize animation (compact) or direct update (expanded)
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!hasDims || collapsingRef.current) return
 
     const prev = { ...aDims.current }
@@ -648,7 +701,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   // Squish on expand (showBody false→true) — collapse squish is fired directly in morph code
   // Skip squish on hover re-expand (hovered + was dismissing) to avoid jarring bounce
   const prevShowBody = useRef(false)
-  useLayoutEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!prevShowBody.current && showBody && !hoveredRef.current) {
       // Small delay after morph starts for more satisfying "settle then bounce" feel
       const t = setTimeout(() => triggerLandingSquish('expand'), 80)
@@ -760,6 +813,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
   // Hover pauses the timer. On unhover, timer restarts with remaining time.
   const remainingRef = useRef<number | null>(null)
   const timerStartRef = useRef(0)
+  const progressDelayRef = useRef(0)
   useEffect(() => {
     if (!showBody || actionSuccess || dismissing) return
 
@@ -767,6 +821,7 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     const collapseMs = prefersReducedMotion ? 10 : ((0.9) * 1000)
     const displayMs = timing?.displayDuration ?? DEFAULT_DISPLAY_DURATION
     const fullDelay = displayMs - expandDelayMs - collapseMs
+    progressDelayRef.current = Math.max(fullDelay, 0)
     if (fullDelay <= 0) return
 
     // Don't start timer while hovered (individual or container) — pause and resume on unhover
@@ -815,6 +870,8 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     reExpandingRef.current = true
     setDismissing(false)
     setShowBody(true)
+    // Remount the progress bar so the CSS animation restarts from full width
+    if (showProgress) setProgressKey(k => k + 1)
 
     // Directly drive the expand morph from current position
     // Can't rely on Phase 2 because showBody might already be true (mid-collapse hover)
@@ -1036,6 +1093,62 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     try { effectiveAction.onClick() } catch { /* onClick errors shouldn't block morph-back */ }
   }, [effectiveAction])
 
+  // ---------------------------------------------------------------------------
+  // Swipe-to-dismiss touch gesture
+  // ---------------------------------------------------------------------------
+  const SWIPE_THRESHOLD = 100
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null)
+  const [swipeOffsetX, setSwipeOffsetX] = useState(0)
+  const isSwipingRef = useRef(false)
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!getGoeySwipeToDismiss()) return
+    const touch = e.touches[0]
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY }
+    isSwipingRef.current = false
+  }, [])
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!swipeStartRef.current || !getGoeySwipeToDismiss()) return
+    const touch = e.touches[0]
+    const dx = touch.clientX - swipeStartRef.current.x
+    const dy = touch.clientY - swipeStartRef.current.y
+
+    // If vertical movement is dominant, cancel swipe tracking
+    if (!isSwipingRef.current && Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) {
+      swipeStartRef.current = null
+      return
+    }
+
+    // Lock into horizontal swipe once threshold is met
+    if (!isSwipingRef.current && Math.abs(dx) > 10) {
+      isSwipingRef.current = true
+    }
+
+    if (isSwipingRef.current) {
+      setSwipeOffsetX(dx)
+    }
+  }, [])
+
+  const handleTouchEnd = useCallback(() => {
+    if (!getGoeySwipeToDismiss()) {
+      swipeStartRef.current = null
+      return
+    }
+    if (isSwipingRef.current && Math.abs(swipeOffsetX) >= SWIPE_THRESHOLD && toastId) {
+      sonnerToast.dismiss(toastId)
+    }
+    swipeStartRef.current = null
+    isSwipingRef.current = false
+    setSwipeOffsetX(0)
+  }, [swipeOffsetX, toastId])
+
+  // Compute swipe visual feedback
+  const swipeOpacity = swipeOffsetX !== 0
+    ? Math.max(0, 1 - Math.abs(swipeOffsetX) / (SWIPE_THRESHOLD * 1.5))
+    : 1
+  const swipeTranslate = swipeOffsetX !== 0 ? `translateX(${swipeOffsetX}px)` : ''
+
   const renderIcon = () => {
     if (!actionSuccess && icon) return icon
     if (isLoading) return <SpinnerIcon size={18} className={styles.spinnerSpin} />
@@ -1043,7 +1156,10 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     return <IconComponent size={18} />
   }
 
-  const iconTransition = prefersReducedMotion ? { duration: 0.01 } : { duration: 0.2 }
+  const iconTransition = useMemo(
+    () => prefersReducedMotion ? { duration: 0.01 } : { duration: 0.2 },
+    [prefersReducedMotion],
+  )
   const iconEl = (
     <div className={`${styles.iconWrapper}${classNames?.icon ? ` ${classNames.icon}` : ''}`}>
       <AnimatePresence mode="wait">
@@ -1063,12 +1179,46 @@ export const GoeyToast: FC<GoeyToastProps> = ({
     <span className={`${styles.title}${classNames?.title ? ` ${classNames.title}` : ''}`}>{effectiveTitle}</span>
   )
 
+  // Capture creation time on mount for the timestamp display
+  const createdAtRef = useRef(new Date())
+  const timestampStr = useMemo(
+    () => createdAtRef.current.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', second: '2-digit' }),
+    [],
+  )
+
   const iconAndTitle = (
     <>{iconEl}{titleEl}</>
   )
 
+  // Memoize base position style so a new object isn't created every render
+  const basePositionStyle = useMemo<React.CSSProperties>(
+    () => isCenter ? { margin: '0 auto' } : isRight ? { marginLeft: 'auto', transform: 'scaleX(-1)' } : {},
+    [isCenter, isRight],
+  )
+
+  // Build wrapper style: merge position styles with swipe transform/opacity
+  const wrapperStyle = useMemo<React.CSSProperties | undefined>(() => {
+    if (swipeTranslate) {
+      return {
+        ...basePositionStyle,
+        transform: (basePositionStyle.transform ? basePositionStyle.transform + ' ' : '') + swipeTranslate,
+        opacity: swipeOpacity,
+        transition: 'none',
+      }
+    }
+    return Object.keys(basePositionStyle).length > 0 ? basePositionStyle : undefined
+  }, [basePositionStyle, swipeTranslate, swipeOpacity])
+
+  const contentStyle = useMemo(
+    () => isCenter ? { textAlign: 'center' } as const : isRight ? { transform: 'scaleX(-1)', textAlign: 'right' } as const : { textAlign: 'left' } as const,
+    [isCenter, isRight],
+  )
+
+  const handleMouseEnter = useCallback(() => { hoveredRef.current = true; setHovered(true) }, [])
+  const handleMouseLeave = useCallback(() => { hoveredRef.current = false; setHovered(false) }, [])
+
   return (
-    <div ref={wrapperRef} className={`${styles.wrapper}${classNames?.wrapper ? ` ${classNames.wrapper}` : ''}`} style={isCenter ? { margin: '0 auto' } : isRight ? { marginLeft: 'auto', transform: 'scaleX(-1)' } : undefined} role={effectivePhase === 'error' ? 'alert' : 'status'} aria-live={effectivePhase === 'error' ? 'assertive' : 'polite'} aria-atomic="true" onMouseEnter={() => { hoveredRef.current = true; setHovered(true) }} onMouseLeave={() => { hoveredRef.current = false; setHovered(false) }} data-center={isCenter || undefined}>
+    <div ref={wrapperRef} className={`${styles.wrapper}${classNames?.wrapper ? ` ${classNames.wrapper}` : ''}`} style={wrapperStyle} role={effectivePhase === 'error' || effectivePhase === 'warning' ? 'alert' : 'status'} aria-live={effectivePhase === 'error' || effectivePhase === 'warning' ? 'assertive' : 'polite'} aria-atomic="true" onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave} onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd} data-center={isCenter || undefined} data-theme={theme}>
       {/* SVG background — overflow visible, path controls shape */}
       <svg
         className={styles.blobSvg}
@@ -1086,10 +1236,12 @@ export const GoeyToast: FC<GoeyToastProps> = ({
       <div
         ref={contentRef}
         className={`${styles.content} ${showBody ? styles.contentExpanded : styles.contentCompact}${classNames?.content ? ` ${classNames.content}` : ''}`}
-        style={isCenter ? { textAlign: 'center' } : isRight ? { transform: 'scaleX(-1)', textAlign: 'right' } : { textAlign: 'left' }}
+        style={contentStyle}
       >
         <div ref={headerRef} className={`${styles.header} ${titleColorMap[effectivePhase]}${classNames?.header ? ` ${classNames.header}` : ''}`}>
           {iconAndTitle}
+          {/* No-body toasts: timestamp inline after the title (hidden after action success) */}
+          {!hasDescription && !hasAction && !actionSuccess && <span className={styles.timestamp}>{timestampStr}</span>}
         </div>
 
         <AnimatePresence>
@@ -1103,7 +1255,25 @@ export const GoeyToast: FC<GoeyToastProps> = ({
               exit={{ opacity: 0 }}
               transition={prefersReducedMotion ? { duration: 0.01 } : { duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
             >
+              <span className={styles.timestamp} style={{ float: 'right', marginLeft: 10, marginTop: 3, paddingLeft: 0 }}>{timestampStr}</span>
               {effectiveDescription}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Body toasts without description: timestamp on its own line */}
+        <AnimatePresence>
+          {showBody && !hasDescription && hasAction && !dismissing && (
+            <motion.div
+              key="timestamp-body"
+              className={styles.timestamp}
+              style={{ textAlign: 'right', marginTop: 8, paddingLeft: 0 }}
+              initial={prefersReducedMotion ? false : { opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={prefersReducedMotion ? { duration: 0.01 } : { duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+            >
+              {timestampStr}
             </motion.div>
           )}
         </AnimatePresence>
@@ -1129,6 +1299,19 @@ export const GoeyToast: FC<GoeyToastProps> = ({
             </motion.div>
           )}
         </AnimatePresence>
+
+        {showProgress && (
+          <div
+            key={progressKey}
+            className={`${styles.progressWrapper}${hovered || containerHovered ? ` ${styles.progressPaused}` : ''}`}
+            style={{ opacity: showBody && !actionSuccess ? 1 : 0 }}
+          >
+            <div
+              className={`${styles.progressBar} ${progressColorMap[effectivePhase]}`}
+              style={{ '--goey-progress-duration': `${progressDelayRef.current || (timing?.displayDuration ?? DEFAULT_DISPLAY_DURATION)}ms` } as React.CSSProperties}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

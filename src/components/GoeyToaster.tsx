@@ -1,7 +1,10 @@
 import { useEffect } from 'react'
 import { Toaster } from 'sonner'
 import type { GoeyToasterProps } from '../types'
-import { setGoeyPosition, setGoeySpring, setGoeyBounce, setGoeyVisibleToasts, setContainerHovered } from '../context'
+import { animationPresets } from '../presets'
+import { setGoeyPosition, setGoeyDir, setGoeySpring, setGoeyBounce, setGoeyVisibleToasts, setContainerHovered, setGoeySwipeToDismiss, setGoeyCloseOnEscape, setGoeyTheme, setGoeyMaxQueue, setGoeyQueueOverflow, setGoeyShowProgress } from '../context'
+import { goeyToast, _getMostRecentActiveId } from '../goey-toast'
+import { AriaLiveAnnouncer } from './AriaLiveAnnouncer'
 
 export function GoeyToaster({
   position = 'bottom-right',
@@ -15,24 +18,78 @@ export function GoeyToaster({
   richColors,
   visibleToasts,
   dir,
-  spring = true,
+  preset,
+  spring,
   bounce,
+  swipeToDismiss = true,
+  closeOnEscape = true,
+  maxQueue = Infinity,
+  queueOverflow = 'drop-oldest',
+  showProgress = false,
 }: GoeyToasterProps) {
+  const presetConfig = preset ? animationPresets[preset] : undefined
+  const resolvedSpring = spring ?? presetConfig?.spring ?? true
+  const resolvedBounce = bounce ?? presetConfig?.bounce
+
   useEffect(() => {
     setGoeyPosition(position)
   }, [position])
 
   useEffect(() => {
-    setGoeySpring(spring)
-  }, [spring])
+    setGoeyDir(dir ?? 'ltr')
+  }, [dir])
 
   useEffect(() => {
-    setGoeyBounce(bounce)
-  }, [bounce])
+    setGoeyTheme(theme)
+  }, [theme])
+
+  useEffect(() => {
+    setGoeySpring(resolvedSpring)
+  }, [resolvedSpring])
+
+  useEffect(() => {
+    setGoeyBounce(resolvedBounce)
+  }, [resolvedBounce])
+
+  useEffect(() => {
+    setGoeySwipeToDismiss(swipeToDismiss)
+  }, [swipeToDismiss])
+
+  useEffect(() => {
+    setGoeyCloseOnEscape(closeOnEscape)
+  }, [closeOnEscape])
+
+  useEffect(() => {
+    if (!closeOnEscape) return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        const recentId = _getMostRecentActiveId()
+        if (recentId != null) {
+          goeyToast.dismiss(recentId)
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [closeOnEscape])
 
   useEffect(() => {
     setGoeyVisibleToasts(visibleToasts ?? 3)
   }, [visibleToasts])
+
+  useEffect(() => {
+    setGoeyMaxQueue(maxQueue)
+  }, [maxQueue])
+
+  useEffect(() => {
+    setGoeyQueueOverflow(queueOverflow)
+  }, [queueOverflow])
+
+  useEffect(() => {
+    setGoeyShowProgress(showProgress)
+  }, [showProgress])
 
   // Detect hover on the Sonner container and broadcast to all GoeyToast instances.
   // Uses Sonner's `data-expanded` attribute (set per-toast <li>) as the hover signal
@@ -60,20 +117,27 @@ export function GoeyToaster({
     const el = document.querySelector<HTMLElement>('[data-sonner-toaster]')
     if (el) attach(el)
 
-    // Re-discover if the <ol> is remounted (e.g. all toasts dismissed then new ones appear)
+    // Re-discover if the <ol> is remounted (e.g. all toasts dismissed then new ones appear).
+    // Debounce via rAF to coalesce rapid DOM mutations (e.g. multiple toasts mounting).
+    let bodyRafId = 0
     const bodyObs = new MutationObserver(() => {
-      const found = document.querySelector<HTMLElement>('[data-sonner-toaster]')
-      if (found) {
-        attach(found)
-      } else if (currentOl) {
-        expandObs?.disconnect()
-        currentOl = null
-        setContainerHovered(false)
-      }
+      if (bodyRafId) return
+      bodyRafId = requestAnimationFrame(() => {
+        bodyRafId = 0
+        const found = document.querySelector<HTMLElement>('[data-sonner-toaster]')
+        if (found) {
+          attach(found)
+        } else if (currentOl) {
+          expandObs?.disconnect()
+          currentOl = null
+          setContainerHovered(false)
+        }
+      })
     })
     bodyObs.observe(document.body, { childList: true, subtree: true })
 
     return () => {
+      if (bodyRafId) cancelAnimationFrame(bodyRafId)
       bodyObs.disconnect()
       expandObs?.disconnect()
       setContainerHovered(false)
@@ -104,18 +168,21 @@ export function GoeyToaster({
   }, [])
 
   return (
-    <Toaster
-      position={position}
-      duration={duration}
-      gap={gap}
-      offset={offset}
-      theme={theme}
-      toastOptions={{ unstyled: true, ...toastOptions }}
-      expand={expand}
-      closeButton={closeButton}
-      richColors={richColors}
-      visibleToasts={99}
-      dir={dir}
-    />
+    <>
+      <Toaster
+        position={position}
+        duration={duration}
+        gap={gap}
+        offset={offset}
+        theme={theme}
+        toastOptions={{ unstyled: true, ...toastOptions }}
+        expand={expand}
+        closeButton={closeButton}
+        richColors={richColors}
+        visibleToasts={99}
+        dir={dir}
+      />
+      <AriaLiveAnnouncer />
+    </>
   )
 }

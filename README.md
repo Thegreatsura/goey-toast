@@ -19,6 +19,14 @@
 - Hover pause: hovering an expanded toast pauses the dismiss timer
 - Hover re-expand: hovering a collapsed pill re-expands the toast
 - Pre-dismiss collapse animation
+- In-place toast updates via `goeyToast.update()`
+- Dismiss by type filter: `goeyToast.dismiss({ type: 'error' })`
+- Dark mode and RTL layout support
+- Animation presets: smooth, bouncy, subtle, snappy
+- Countdown progress bar
+- Keyboard dismiss (Escape) and swipe-to-dismiss on mobile
+- Toast queue with configurable overflow strategy
+- Dismiss callbacks: `onDismiss` and `onAutoClose`
 
 ## Installation
 
@@ -87,7 +95,50 @@ goeyToast.error(title, options?)        // red
 goeyToast.warning(title, options?)      // yellow
 goeyToast.info(title, options?)         // blue
 goeyToast.promise(promise, data)        // loading -> success/error
-goeyToast.dismiss(toastId?)             // dismiss one or all toasts
+goeyToast.update(id, options)           // update an existing toast in-place
+goeyToast.dismiss(idOrFilter?)          // dismiss one, by type, or all toasts
+```
+
+#### `goeyToast.update(id, options)`
+
+Updates an existing toast in-place without removing and re-creating it.
+
+```ts
+const id = goeyToast.success('Uploading...')
+
+// Later, update the toast
+goeyToast.update(id, {
+  title: 'Upload complete',
+  type: 'success',
+  description: '3 files uploaded.',
+})
+```
+
+**`GoeyToastUpdateOptions`:**
+
+| Option        | Type              | Description                   |
+| ------------- | ----------------- | ----------------------------- |
+| `title`       | `string`          | New title text                |
+| `description` | `ReactNode`       | New body content              |
+| `type`        | `GoeyToastType`   | Change the toast type/color   |
+| `action`      | `GoeyToastAction` | New action button             |
+
+#### `goeyToast.dismiss(idOrFilter?)`
+
+Dismiss a single toast by ID, all toasts of a given type, or all toasts at once.
+
+```ts
+// Dismiss a specific toast
+goeyToast.dismiss(toastId)
+
+// Dismiss all error toasts
+goeyToast.dismiss({ type: 'error' })
+
+// Dismiss multiple types
+goeyToast.dismiss({ type: ['error', 'warning'] })
+
+// Dismiss all toasts
+goeyToast.dismiss()
 ```
 
 ### `GoeyToastOptions`
@@ -108,6 +159,10 @@ Options passed as the second argument to `goeyToast()` and type-specific methods
 | `timing`      | `GoeyToastTimings`   | Animation timing overrides         |
 | `spring`      | `boolean`            | Enable spring/bounce animations (default `true`) |
 | `bounce`      | `number`             | Spring intensity from `0.05` (subtle) to `0.8` (dramatic), default `0.4` |
+| `showProgress`| `boolean`            | Show countdown progress bar                      |
+| `onDismiss`   | `(id) => void`       | Called when toast is dismissed (any reason)       |
+| `onAutoClose` | `(id) => void`       | Called only on timer-based auto-dismiss           |
+| `preset`      | `AnimationPresetName`| Animation preset (`'smooth'`, `'bouncy'`, `'subtle'`, `'snappy'`) |
 
 ### `GoeyToastAction`
 
@@ -154,6 +209,13 @@ Props for the `<GoeyToaster />` component.
 | `toastOptions` | `Partial<ExternalToast>`            | --               | Default options passed to Sonner              |
 | `spring`     | `boolean`                             | `true`           | Enable spring/bounce animations globally      |
 | `bounce`     | `number`                              | `0.4`            | Spring intensity: `0.05` (subtle) to `0.8` (dramatic) |
+| `preset`     | `AnimationPresetName`                 | --               | Animation preset for all toasts               |
+| `closeOnEscape` | `boolean`                          | `true`           | Dismiss most recent toast on Escape key       |
+| `showProgress` | `boolean`                           | `false`          | Show countdown progress bar on all toasts     |
+| `maxQueue`   | `number`                              | `Infinity`       | Maximum queued toasts                         |
+| `queueOverflow` | `'drop-oldest' \| 'drop-newest'`   | `'drop-oldest'`  | Queue overflow strategy                       |
+| `dir`        | `'ltr' \| 'rtl'`                     | `'ltr'`          | Layout direction                              |
+| `swipeToDismiss` | `boolean`                         | `true`           | Enable swipe-to-dismiss on mobile             |
 
 ### `GoeyPromiseData<T>`
 
@@ -311,6 +373,48 @@ goeyToast.success('Saved', { bounce: 0.8 })
 
 The `bounce` value (0.05 to 0.8) controls spring stiffness, damping, and squish magnitude together so you get a consistent feel from one number.
 
+### Dark Mode
+
+```tsx
+<GoeyToaster theme="dark" />
+```
+
+### RTL Support
+
+```tsx
+<GoeyToaster dir="rtl" />
+```
+
+### Animation Presets
+
+Four built-in presets: `smooth`, `bouncy`, `subtle`, `snappy`. Apply per-toast or globally:
+
+```tsx
+goeyToast.success('Saved', { preset: 'bouncy' })
+
+// Or globally
+<GoeyToaster preset="smooth" />
+```
+
+### Progress Bar
+
+Show a countdown progress bar on toasts:
+
+```tsx
+goeyToast.success('Saved', { showProgress: true })
+
+// Or enable globally
+<GoeyToaster showProgress />
+```
+
+### Keyboard Shortcuts
+
+Press **Escape** to dismiss the most recent toast. Enabled by default; disable with `closeOnEscape={false}`.
+
+### Swipe to Dismiss
+
+On mobile, swipe toasts to dismiss them. Enabled by default; disable with `swipeToDismiss={false}`.
+
 ## Exports
 
 ```ts
@@ -320,6 +424,9 @@ export { GoeyToaster } from 'goey-toast'
 // Toast function
 export { goeyToast } from 'goey-toast'
 
+// Animation presets
+export { animationPresets } from 'goey-toast'
+
 // Types
 export type {
   GoeyToastOptions,
@@ -328,6 +435,10 @@ export type {
   GoeyToastAction,
   GoeyToastClassNames,
   GoeyToastTimings,
+  GoeyToastUpdateOptions,
+  DismissFilter,
+  AnimationPreset,
+  AnimationPresetName,
 } from 'goey-toast'
 ```
 

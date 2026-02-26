@@ -23,4 +23,13 @@ export const styles = {
   actionError: 'goey-actionError',
   actionWarning: 'goey-actionWarning',
   actionInfo: 'goey-actionInfo',
+  progressWrapper: 'goey-progressWrapper',
+  progressBar: 'goey-progressBar',
+  progressDefault: 'goey-progressDefault',
+  progressSuccess: 'goey-progressSuccess',
+  progressError: 'goey-progressError',
+  progressWarning: 'goey-progressWarning',
+  progressInfo: 'goey-progressInfo',
+  progressPaused: 'goey-progressPaused',
+  timestamp: 'goey-timestamp',
 } as const
