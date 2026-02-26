@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { GoeyToaster, goeyToast, animationPresets } from 'goey-toast'
-import type { GoeyToastOptions, GoeyToasterProps, AnimationPresetName, GoeyToastUpdateOptions, DismissFilter } from 'goey-toast'
+import type { GoeyToastOptions, GoeyToasterProps, AnimationPresetName } from 'goey-toast'
 import { Analytics } from '@vercel/analytics/react'
 import 'goey-toast/styles.css'
 import './App.css'
