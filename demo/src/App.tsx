@@ -168,6 +168,7 @@ function App() {
     }
   }
 
+
   const fireBuilderToast = () => {
     const options: GoeyToastOptions = {}
     if (bHasDesc && bDesc) options.description = bDesc
@@ -272,6 +273,7 @@ function App() {
             <a href="https://www.npmjs.com/package/goey-toast" target="_blank" rel="noopener noreferrer" className="header-icon-link" aria-label="npm">
               <NpmIcon size={18} />
             </a>
+
           </div>
 
           <button className="mobile-menu-btn" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Menu">
@@ -469,6 +471,10 @@ function App() {
                   {installCopy.copied ? <CheckIcon /> : <CopyIcon />}
                 </button>
               </div>
+              <a href="https://www.buymeacoffee.com/gxWiwwHU0P" target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0 16px', fontSize: 15, fontWeight: 700, fontFamily: 'Cookie, cursive', background: '#FFDD00', color: '#000', borderRadius: 'var(--radius-sm)', textDecoration: 'none', lineHeight: 1, alignSelf: 'stretch', transition: 'transform 0.15s ease' }} onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.05)')} onMouseLeave={e => (e.currentTarget.style.transform = '')}>
+                <img src="https://cdn.buymeacoffee.com/buttons/bmc-new-btn-logo.svg" alt="" width={20} height={28} />
+                <span>Buy me a coffee</span>
+              </a>
             </div>
           </div>
 
