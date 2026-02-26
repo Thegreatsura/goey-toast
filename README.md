@@ -23,7 +23,8 @@
 - Dismiss by type filter: `goeyToast.dismiss({ type: 'error' })`
 - Dark mode and RTL layout support
 - Animation presets: smooth, bouncy, subtle, snappy
-- Countdown progress bar
+- Timestamp display on expanded toasts
+- Countdown progress bar with hover-pause and re-expand
 - Keyboard dismiss (Escape) and swipe-to-dismiss on mobile
 - Toast queue with configurable overflow strategy
 - Dismiss callbacks: `onDismiss` and `onAutoClose`
@@ -103,14 +104,17 @@ goeyToast.dismiss(idOrFilter?)          // dismiss one, by type, or all toasts
 
 Updates an existing toast in-place without removing and re-creating it.
 
-```ts
-const id = goeyToast.success('Uploading...')
+```tsx
+const id = goeyToast('Uploading...', {
+  icon: <SpinnerIcon />,
+})
 
 // Later, update the toast
 goeyToast.update(id, {
   title: 'Upload complete',
   type: 'success',
   description: '3 files uploaded.',
+  icon: null, // clears the custom icon
 })
 ```
 
@@ -122,6 +126,7 @@ goeyToast.update(id, {
 | `description` | `ReactNode`       | New body content              |
 | `type`        | `GoeyToastType`   | Change the toast type/color   |
 | `action`      | `GoeyToastAction` | New action button             |
+| `icon`        | `ReactNode \| null` | Custom icon (pass `null` to clear) |
 
 #### `goeyToast.dismiss(idOrFilter?)`
 
@@ -235,6 +240,8 @@ Configuration for `goeyToast.promise()`.
 | `timing`      | `GoeyToastTimings`                            | No       | Animation timing overrides                     |
 | `spring`      | `boolean`                                     | No       | Enable spring/bounce animations (default `true`) |
 | `bounce`      | `number`                                      | No       | Spring intensity: `0.05` (subtle) to `0.8` (dramatic), default `0.4` |
+| `onDismiss`   | `(id: string \| number) => void`              | No       | Called when toast is dismissed (any reason)       |
+| `onAutoClose` | `(id: string \| number) => void`              | No       | Called only on timer-based auto-dismiss           |
 
 **`description` sub-fields:**
 
