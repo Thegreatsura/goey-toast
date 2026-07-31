@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useLayoutEffect } from 'react'
 import { Toaster } from 'sonner'
 import type { GooeyToasterProps } from '../types'
 import { animationPresets } from '../presets'
@@ -96,7 +96,7 @@ export function GooeyToaster({
     setGooeyCloseButton(closeButton ?? false)
   }, [closeButton])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setGooeyShowTimestamp(showTimestamp)
   }, [showTimestamp])
 

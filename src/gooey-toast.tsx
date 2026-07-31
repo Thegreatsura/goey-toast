@@ -190,7 +190,7 @@ function GooeyToastWrapper({
   const [description, setDescription] = useState(initialDescription)
   const [action, setAction] = useState(initialAction)
   const [currentIcon, setCurrentIcon] = useState<ReactNode | undefined>(icon)
-  const [showTimestamp, setShowTimestamp] = useState(initialShowTimestamp ?? true)
+  const [showTimestamp, setShowTimestamp] = useState<boolean | undefined>(initialShowTimestamp)
 
   // Subscribe to in-place updates for this toast's ID.
   useEffect(() => {
@@ -340,7 +340,7 @@ function PromiseToastWrapper<T>({
         preset={data.preset}
         spring={data.spring}
         bounce={data.bounce}
-        showTimestamp={data.showTimestamp ?? true}
+        showTimestamp={data.showTimestamp}
         toastId={toastId}
       />
     </ToastErrorBoundary>

@@ -53,6 +53,56 @@ describe('GooeyToaster', () => {
   })
 })
 
+describe('GooeyToaster showTimestamp', () => {
+  const mockCustom = toast.custom as ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    mockCustom.mockClear()
+    _resetQueue()
+  })
+
+  function renderToastAfterToaster(
+    toasterProps?: React.ComponentProps<typeof GooeyToaster>,
+    toastFn: () => string | number = () => gooeyToast.success('Saved!')
+  ) {
+    render(<GooeyToaster {...toasterProps} />)
+    toastFn()
+    const renderFn = mockCustom.mock.calls[0][0]
+    return render(renderFn())
+  }
+
+  it('hides timestamp globally when showTimestamp is false', () => {
+    renderToastAfterToaster({ showTimestamp: false })
+    expect(document.querySelector('[class*="timestamp"]')).toBeNull()
+  })
+
+  it('shows timestamp globally when showTimestamp is true', () => {
+    renderToastAfterToaster({ showTimestamp: true })
+    expect(document.querySelector('[class*="timestamp"]')).toBeInTheDocument()
+  })
+
+  it('allows per-toast showTimestamp=true to override global false', () => {
+    renderToastAfterToaster(
+      { showTimestamp: false },
+      () => gooeyToast.success('Saved!', { showTimestamp: true })
+    )
+    expect(document.querySelector('[class*="timestamp"]')).toBeInTheDocument()
+  })
+
+  it('hides timestamp for promise toasts when showTimestamp is false globally', async () => {
+    render(<GooeyToaster showTimestamp={false} />)
+    const promise = new Promise<string>(() => {})
+    gooeyToast.promise(promise, {
+      loading: 'Saving...',
+      success: 'Saved!',
+      error: 'Failed',
+    })
+    const renderFn = mockCustom.mock.calls[0][0]
+    render(renderFn())
+    expect(document.querySelector('[class*="timestamp"]')).toBeNull()
+  })
+})
+
 describe('GooeyToaster closeOnEscape', () => {
   const mockDismiss = toast.dismiss as ReturnType<typeof vi.fn>
   const mockCustom = toast.custom as ReturnType<typeof vi.fn>
