@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `GooeyToaster` `showTimestamp={false}` now correctly hides timestamps on all toasts globally (fixes [#20](https://github.com/anl331/goey-toast/issues/20))
+- Promise toasts respect the global `showTimestamp` setting when no per-toast override is provided
+
 ## [0.5.0] - 2026-06-08
 
 ### Added
